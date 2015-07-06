@@ -69,10 +69,6 @@ class VaapiDecoderBase:public IVideoDecoder {
 
     /* native window related functions */
     void setNativeDisplay(NativeDisplay * nativeDisplay);
-    void enableNativeBuffers(void);
-    Decode_Status getClientNativeWindowBuffer(void *bufferHeader,
-                                              void *nativeBufferHandle);
-    Decode_Status flagNativeBuffer(void *pBuffer);
     void releaseLock(bool lockable=false);
 
     //do not use this, we will remove this in near future
@@ -119,7 +115,6 @@ class VaapiDecoderBase:public IVideoDecoder {
   private:
     bool m_lowDelay;
     bool m_rawOutput;
-    bool m_enableNativeBuffersFlag;
 #ifdef __ENABLE_DEBUG__
     int renderPictureCount;
 #endif
