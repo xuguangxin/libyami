@@ -76,7 +76,6 @@ class VaapiDecoderBase:public IVideoDecoder {
   protected:
     Decode_Status setupVA(uint32_t numSurface, VAProfile profile);
     Decode_Status terminateVA(void);
-    Decode_Status updateReference(void);
     Decode_Status outputPicture(const PicturePtr& picture);
     SurfacePtr createSurface();
 
@@ -93,15 +92,6 @@ class VaapiDecoderBase:public IVideoDecoder {
      * empty surface, recycle used surface.
      */
     DecSurfacePoolPtr m_surfacePool;
-
-    /* the current render target for decoder */
-    // XXX, not useful. decoding bases on VaapiPicture, rendering bases on IVideoDecoder->getOutput()
-    VideoSurfaceBuffer *m_renderTarget;
-
-    /* reference picture, h264 will not use */
-    // XXX, not used. reference frame management base on VaapiPicture
-    VideoSurfaceBuffer *m_lastReference;
-    VideoSurfaceBuffer *m_forwardReference;
 
     bool m_VAStarted;
 
