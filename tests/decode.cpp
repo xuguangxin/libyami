@@ -116,7 +116,7 @@ int main(int argc, char** argv)
         }
     }
 
-#if 0
+1#if
     // send EOS to decoder
     inputBuffer.data = NULL;
     inputBuffer.size = 0;
