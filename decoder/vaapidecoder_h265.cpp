@@ -43,6 +43,40 @@
 namespace YamiMediaCodec{
 typedef VaapiDecoderH265::PicturePtr PicturePtr;
 
+bool isIdr(const H265NalUnit* const nalu)
+{
+    return nalu->type == H265_NAL_SLICE_IDR_W_RADL
+            || nalu->type ==H265_NAL_SLICE_IDR_N_LP;
+}
+
+bool isBla(const H265NalUnit* const nalu)
+{
+    return nalu->type == H265_NAL_SLICE_BLA_W_LP
+            || nalu->type == H265_NAL_SLICE_BLA_W_RADL
+            || nalu->type == H265_NAL_SLICE_BLA_N_LP;
+}
+
+#ifndef H265_NAL_SLICE_RSV_IRAP_VCL23
+#define H265_NAL_SLICE_RSV_IRAP_VCL23 23
+#endif
+bool isIrap(const H265NalUnit* const nalu)
+{
+    return nalu->type >=  H265_NAL_SLICE_BLA_W_LP
+            && nalu->type <= H265_NAL_SLICE_RSV_IRAP_VCL23;
+}
+
+bool isRasl(const H265NalUnit* const nalu)
+{
+    return nalu->type == H265_NAL_SLICE_RASL_R
+            || nalu->type == H265_NAL_SLICE_RASL_N;
+}
+
+bool isRadl(const H265NalUnit* const nalu)
+{
+    return nalu->type == H265_NAL_SLICE_RADL_R
+            || nalu->type == H265_NAL_SLICE_RADL_N;
+}
+
 class VaapiDecPictureH265 : public VaapiDecPicture
 {
 public:
@@ -51,9 +85,24 @@ public:
     {
     }
     int32_t m_poc;
+    bool    m_noRaslOutputFlag;
+    bool    m_picOutputFlag;
 };
+/*
+bool VaapiDecoderH265::DPB::init(VaapiDecPictureH265 * picture,
+     H265SliceHdr *header,  H265NalUnit * nalu, bool newStream)
+{
+    const H265PPS *const pps = header->pps;
+    const H265SPS *const sps = pps->sps;
+    bool noRaslOutputFlag
+        = isIdr(nalu) || isBla(nalu) || newStream;
+    return true;
+}*/
 
-VaapiDecoderH265::VaapiDecoderH265()
+VaapiDecoderH265::VaapiDecoderH265():
+    m_prevPicOrderCntMsb(0),
+    m_prevPicOrderCntLsb(0),
+    m_newStream(true)
 {
     m_parser = h265_parser_new();
 }
@@ -410,13 +459,57 @@ Decode_Status VaapiDecoderH265::ensureContext(const H265SPS* sps)
     return DECODE_SUCCESS;
 }
 
-PicturePtr VaapiDecoderH265::createPicture(const H265SliceHdr* header)
+void VaapiDecoderH265::getPoc(const PicturePtr& picture,
+        const H265SliceHdr* const header,
+        const H265NalUnit* const nalu)
+{
+    const H265PPS* const pps = header->pps;
+    const H265SPS* const sps = pps->sps;
+
+    uint8_t temporalID = nalu->temporal_id_plus1 - 1;
+    //fix me
+    ASSERT(!temporalID && "do not support high temporal id ");
+
+    const uint16_t pocLsb = header->pic_order_cnt_lsb;
+    const int32_t MaxPicOrderCntLsb = 1 << (sps->log2_max_pic_order_cnt_lsb_minus4 + 4);
+    int32_t picOrderCntMsb;
+    if (isIrap(nalu) && picture->m_noRaslOutputFlag) {
+        picOrderCntMsb = 0;
+    } else {
+        if((pocLsb < m_prevPicOrderCntMsb)
+                && ((m_prevPicOrderCntMsb - pocLsb) >= (MaxPicOrderCntLsb / 2))) {
+            picOrderCntMsb = m_prevPicOrderCntMsb + MaxPicOrderCntLsb;
+        } else if((pocLsb > m_prevPicOrderCntLsb)
+                && ((pocLsb - m_prevPicOrderCntLsb) > (MaxPicOrderCntLsb / 2))) {
+            picOrderCntMsb = m_prevPicOrderCntMsb - MaxPicOrderCntLsb;
+        } else {
+            picOrderCntMsb =  m_prevPicOrderCntMsb;
+        }
+    }
+    picture->m_poc = picOrderCntMsb + pocLsb;
+    ERROR("poc = %d", picture->m_poc);
+    //fixme:sub-layer non-reference picture.
+    if (!isRasl(nalu) || !isRadl(nalu)) {
+        m_prevPicOrderCntMsb = picOrderCntMsb;
+        m_prevPicOrderCntLsb = pocLsb;
+    }
+}
+
+PicturePtr VaapiDecoderH265::createPicture(const H265SliceHdr* const header,
+        const H265NalUnit* const nalu)
 {
     PicturePtr picture;
     SurfacePtr surface = createSurface();
     if (!surface)
         return picture;
     picture.reset(new VaapiDecPictureH265(m_context, surface, m_currentPTS));
+
+    picture->m_noRaslOutputFlag = isIdr(nalu) || isBla(nalu) || m_newStream;
+    picture->m_picOutputFlag
+        = (isRasl(nalu) && picture->m_noRaslOutputFlag) ? false : header->pic_output_flag;
+
+    getPoc(picture, header, nalu);
+
     return picture;
 }
 
@@ -438,7 +531,7 @@ Decode_Status VaapiDecoderH265::decodeSlice(H265NalUnit *nalu)
         status = decodeCurrent();
         if (status != DECODE_SUCCESS)
             return status;
-        m_current = createPicture(slice);
+        m_current = createPicture(slice, nalu);
         if (!m_current)
             return DECODE_MEMORY_FAIL;
         if (!fillPicture(m_current, slice))

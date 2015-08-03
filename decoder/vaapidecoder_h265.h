@@ -63,12 +63,17 @@ private:
     bool fillReference(const PicturePtr& picture,
             VASliceParameterBufferHEVC*, const H265SliceHdr*);
 
-    PicturePtr createPicture(const H265SliceHdr* header);
+    PicturePtr createPicture(const H265SliceHdr* const, const H265NalUnit* const nalu);
+    void getPoc(const PicturePtr&,const H265SliceHdr* const,
+            const H265NalUnit* const);
     Decode_Status decodeCurrent();
     Decode_Status outputPicture(const PicturePtr& picture);
 
     H265Parser* m_parser;
     PicturePtr  m_current;
+    uint16_t    m_prevPicOrderCntMsb;
+    int32_t     m_prevPicOrderCntLsb;
+    bool        m_newStream;
     static const bool s_registered; // VaapiDecoderFactory registration result
 };
 
