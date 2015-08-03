@@ -96,36 +96,57 @@ Decode_Status VaapiDecoderH265::decodeCurrent()
     return status;
 }
 
-#if 0
-#define DECLEAR_MXM(mxm) \
-void fillIqMatrix##mxm(VAIQMatrixBufferHEVC* iqMatrix, H265ScalingList* scalingList)
-{
-    for (uint32_t i = 0; i < N_ELEMENTS(iqMatrix->ScalingList##mxm##) i++) {
-        h265_quant_matrix_##mxm##_get_raster_from_zigzag[iqMatrix->ScalingList##mxm##[i],
-            scalingListscaling_lists_##mxm##[i]
-    }
+
+#define FILL_SCALING_LIST(mxm) \
+void fillScalingList##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingList* scalingList) \
+{ \
+    for (int i = 0; i < N_ELEMENTS(iqMatrix->ScalingList##mxm); i++) { \
+        h265_quant_matrix_##mxm##_get_raster_from_zigzag(iqMatrix->ScalingList##mxm[i], \
+            scalingList->scaling_lists_##mxm[i]); \
+    } \
 }
-#endif
+
+FILL_SCALING_LIST(4x4)
+FILL_SCALING_LIST(8x8)
+FILL_SCALING_LIST(16x16)
+FILL_SCALING_LIST(32x32)
+
+#define FILL_SCALING_LIST_DC(mxm) \
+void fillScalingListDc##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingList* scalingList) \
+{ \
+    for (int i = 0; i < N_ELEMENTS(iqMatrix->ScalingListDC##mxm); i++) { \
+        iqMatrix->ScalingListDC##mxm[i] = \
+            scalingList->scaling_list_dc_coef_minus8_##mxm[i] + 8; \
+    } \
+}
+
+FILL_SCALING_LIST_DC(16x16)
+FILL_SCALING_LIST_DC(32x32)
+
 bool VaapiDecoderH265::fillIqMatrix(const PicturePtr& picture, const H265SliceHdr* header)
 {
     H265PPS* pps = header->pps;
     H265SPS* sps = pps->sps;
-    //H265ScalingList* scalingList;
+    H265ScalingList* scalingList;
     if (pps->scaling_list_data_present_flag) {
-        //scalingList = &pps->scaling_list;
+        scalingList = &pps->scaling_list;
     } else if (sps->scaling_list_enabled_flag
                && sps->scaling_list_data_present_flag) {
-        //scalingList = &sps->scaling_list;
+        scalingList = &sps->scaling_list;
     } else {
         //default scaling list
         return true;
     }
-    ASSERT(0 && "iqmatrix");
-#if 0
-    VAIQMatrixBufferHEVC* iqMtraix;
+    VAIQMatrixBufferHEVC* iqMatrix;
     if (!picture->editIqMatrix(iqMatrix))
         return false;
-    #endif
+    fillScalingList4x4(iqMatrix, scalingList);
+    fillScalingList8x8(iqMatrix, scalingList);
+    fillScalingList16x16(iqMatrix, scalingList);
+    fillScalingList32x32(iqMatrix, scalingList);
+    fillScalingListDc16x16(iqMatrix, scalingList);
+    fillScalingListDc32x32(iqMatrix, scalingList);
+    return true;
 }
 
 bool VaapiDecoderH265::fillPicture(const PicturePtr& picture, const H265SliceHdr* header)
