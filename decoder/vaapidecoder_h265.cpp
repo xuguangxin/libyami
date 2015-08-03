@@ -271,8 +271,62 @@ bool VaapiDecoderH265::fillReference(const PicturePtr& picture,
 
 }
 
+inline int32_t clip3(int32_t x, int32_t y, int32_t z)
+{
+    if (z < x)
+        return x;
+    if (z > y)
+        return y;
+    return z;
+}
+
+#define FILL_WEIGHT_TABLE(n) \
+void fillPredWedightTableL##n(VASliceParameterBufferHEVC* slice, \
+        const H265SliceHdr* header, uint8_t chromaLog2WeightDenom) \
+{ \
+    const H265PredWeightTable& w = header->pred_weight_table; \
+    for (int i = 0; i < slice->num_ref_idx_l##n##_active_minus1; i++) { \
+        if (w.luma_weight_l##n##_flag[i]) { \
+                slice->delta_luma_weight_l##n[i] = w.delta_luma_weight_l##n[i]; \
+                slice->luma_offset_l##n[i] = w.luma_offset_l##n[i];\
+            } \
+            if (w.chroma_weight_l##n##_flag[i]) { \
+                for (int j = 0; j < 2; j++) { \
+                    int8_t deltaWeight = w.delta_chroma_weight_l##n[i][j]; \
+                    int32_t chromaWeight = (1 << chromaLog2WeightDenom) + deltaWeight; \
+                    int16_t deltaOffset = w.delta_chroma_offset_l##n[i][j]; \
+                    int32_t chromaOffset = \
+                        deltaOffset - (((128*chromaWeight)>>chromaLog2WeightDenom) + 128);\
+\
+                    slice->delta_chroma_weight_l##n[i][j] = deltaWeight; \
+                    slice->ChromaOffsetL##n[i][j]= (int8_t)clip3(-128, 127, chromaOffset); \
+            } \
+        } \
+    } \
+}
+
+FILL_WEIGHT_TABLE(0)
+FILL_WEIGHT_TABLE(1)
+
 bool VaapiDecoderH265::fillPredWeightTable(VASliceParameterBufferHEVC* slice, const H265SliceHdr* header)
 {
+    H265PPS* pps = header->pps;
+    H265SPS* sps = pps->sps;
+    const H265PredWeightTable& w = header->pred_weight_table;
+    if ((pps->weighted_pred_flag && H265_IS_P_SLICE (header)) ||
+            (pps->weighted_bipred_flag && H265_IS_B_SLICE (header))) {
+        uint8_t chromaLog2WeightDenom = w.luma_log2_weight_denom;
+        slice->luma_log2_weight_denom = w.luma_log2_weight_denom;
+        if (sps->chroma_format_idc != 0) {
+            slice->delta_chroma_log2_weight_denom
+                = w.delta_chroma_log2_weight_denom;
+            chromaLog2WeightDenom
+                += w.delta_chroma_log2_weight_denom;
+        }
+        fillPredWedightTableL0(slice,  header, chromaLog2WeightDenom);
+        if (pps->weighted_bipred_flag && H265_IS_B_SLICE (header))
+            fillPredWedightTableL1(slice,  header, chromaLog2WeightDenom);
+    }
     return true;
 }
 
