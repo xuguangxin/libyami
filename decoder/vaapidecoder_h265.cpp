@@ -467,7 +467,7 @@ Decode_Status VaapiDecoderH265::decodeCurrent()
 
 
 #define FILL_SCALING_LIST(mxm) \
-void fillScalingList##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingList* scalingList) \
+void fillScalingList##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingList* const scalingList) \
 { \
     for (int i = 0; i < N_ELEMENTS(iqMatrix->ScalingList##mxm); i++) { \
         h265_quant_matrix_##mxm##_get_raster_from_zigzag(iqMatrix->ScalingList##mxm[i], \
@@ -481,7 +481,7 @@ FILL_SCALING_LIST(16x16)
 FILL_SCALING_LIST(32x32)
 
 #define FILL_SCALING_LIST_DC(mxm) \
-void fillScalingListDc##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingList* scalingList) \
+void fillScalingListDc##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingList* const scalingList) \
 { \
     for (int i = 0; i < N_ELEMENTS(iqMatrix->ScalingListDC##mxm); i++) { \
         iqMatrix->ScalingListDC##mxm[i] = \
@@ -492,7 +492,7 @@ void fillScalingListDc##mxm(VAIQMatrixBufferHEVC* iqMatrix, const H265ScalingLis
 FILL_SCALING_LIST_DC(16x16)
 FILL_SCALING_LIST_DC(32x32)
 
-bool VaapiDecoderH265::fillIqMatrix(const PicturePtr& picture, const H265SliceHdr* slice)
+bool VaapiDecoderH265::fillIqMatrix(const PicturePtr& picture, const H265SliceHdr* const slice)
 {
     H265PPS* pps = slice->pps;
     H265SPS* sps = pps->sps;
@@ -555,7 +555,7 @@ void VaapiDecoderH265::fillReference(VAPictureHEVC* refs, int32_t size)
 
 
 }
-bool VaapiDecoderH265::fillPicture(const PicturePtr& picture, const H265SliceHdr* slice)
+bool VaapiDecoderH265::fillPicture(const PicturePtr& picture, const H265SliceHdr* const slice)
 {
     VAPictureParameterBufferHEVC* param;
     if (!picture->editPicture(param))
@@ -781,7 +781,7 @@ void fillPredWedightTableL##n(VASliceParameterBufferHEVC* sliceParam, \
 FILL_WEIGHT_TABLE(0)
 FILL_WEIGHT_TABLE(1)
 
-bool VaapiDecoderH265::fillPredWeightTable(VASliceParameterBufferHEVC* sliceParam, const H265SliceHdr* slice)
+bool VaapiDecoderH265::fillPredWeightTable(VASliceParameterBufferHEVC* sliceParam, const H265SliceHdr* const slice)
 {
     H265PPS* pps = slice->pps;
     H265SPS* sps = pps->sps;
@@ -804,14 +804,14 @@ bool VaapiDecoderH265::fillPredWeightTable(VASliceParameterBufferHEVC* slicePara
 }
 
 static inline uint32_t
-getSliceDataByteOffset(const H265SliceHdr* sliceHdr, uint32_t nalHeaderBytes)
+getSliceDataByteOffset(const H265SliceHdr* const sliceHdr, uint32_t nalHeaderBytes)
 {
     return nalHeaderBytes + (sliceHdr->header_size + 7) / 8
             - sliceHdr->n_emulation_prevention_bytes;
 }
 
 bool VaapiDecoderH265::fillSlice(const PicturePtr& picture,
-        const H265SliceHdr* slice, const H265NalUnit *nalu)
+        const H265SliceHdr* const slice, const H265NalUnit* const nalu)
 {
     VASliceParameterBufferHEVC* sliceParam;
     if (!picture->newSlice(sliceParam, nalu->data + nalu->offset, nalu->size))
@@ -856,7 +856,7 @@ bool VaapiDecoderH265::fillSlice(const PicturePtr& picture,
     return true;
 }
 
-Decode_Status VaapiDecoderH265::ensureContext(const H265SPS* sps)
+Decode_Status VaapiDecoderH265::ensureContext(const H265SPS* const sps)
 {
     uint8_t surfaceNumber = sps->max_dec_pic_buffering_minus1[0] + 1 + H265_EXTRA_SURFACE_NUMBER;
     if (m_configBuffer.width != sps->width

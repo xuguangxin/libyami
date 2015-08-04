@@ -114,13 +114,13 @@ private:
     Decode_Status decodeParamSet(H265NalUnit*);
     Decode_Status decodeSlice(H265NalUnit*);
 
-    Decode_Status ensureContext(const H265SPS*);
-    bool fillPicture(const PicturePtr& , const H265SliceHdr*);
-    bool fillSlice(const PicturePtr&, const H265SliceHdr*, const H265NalUnit*);
-    bool fillIqMatrix(const PicturePtr&, const H265SliceHdr*);
-    bool fillPredWeightTable(VASliceParameterBufferHEVC*, const H265SliceHdr*);
+    Decode_Status ensureContext(const H265SPS* const);
+    bool fillPicture(const PicturePtr& , const H265SliceHdr* const );
+    bool fillSlice(const PicturePtr&, const H265SliceHdr* const, const H265NalUnit* const );
+    bool fillIqMatrix(const PicturePtr&, const H265SliceHdr* const);
+    bool fillPredWeightTable(VASliceParameterBufferHEVC*, const H265SliceHdr* const);
     bool fillReference(const PicturePtr&,
-            VASliceParameterBufferHEVC*, const H265SliceHdr*);
+            VASliceParameterBufferHEVC*, const H265SliceHdr* const);
     void fillReference(VAPictureHEVC* refs, int32_t size);
     void fillReference(VAPictureHEVC* refs, int32_t& n, const RefSet& refset, uint32_t flags);
 
