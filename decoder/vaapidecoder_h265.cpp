@@ -828,7 +828,7 @@ bool VaapiDecoderH265::fillSlice(const PicturePtr& picture,
     FILL_LONG(dependent_slice_segment_flag);
 
     //follow spec
-    if (!slice->dependent_slice_segment_flag) {
+    if (slice->dependent_slice_segment_flag) {
         slice = m_prevSlice;
     }
 
@@ -975,7 +975,7 @@ Decode_Status VaapiDecoderH265::decodeSlice(H265NalUnit *nalu)
     if (!m_current)
         return DECODE_FAIL;
     status = fillSlice(m_current, slice, nalu);
-    if (status == DECODE_SUCCESS && slice->dependent_slice_segment_flag)
+    if (status == DECODE_SUCCESS && !slice->dependent_slice_segment_flag)
         std::swap(m_currSlice, m_prevSlice);
     return status;
 
