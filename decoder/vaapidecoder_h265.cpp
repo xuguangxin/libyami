@@ -811,22 +811,30 @@ getSliceDataByteOffset(const H265SliceHdr* const sliceHdr, uint32_t nalHeaderByt
 }
 
 bool VaapiDecoderH265::fillSlice(const PicturePtr& picture,
-        const H265SliceHdr* const slice, const H265NalUnit* const nalu)
+        const H265SliceHdr* const theSlice, const H265NalUnit* const nalu)
 {
+    const H265SliceHdr* slice = theSlice;
     VASliceParameterBufferHEVC* sliceParam;
     if (!picture->newSlice(sliceParam, nalu->data + nalu->offset, nalu->size))
         return false;
     sliceParam->slice_data_byte_offset =
         getSliceDataByteOffset(slice, nalu->header_bytes);
     sliceParam->slice_segment_address = slice->segment_address;
-    if (!fillReferenceIndex(sliceParam, slice))
-        return false;
 
 #define FILL_LONG(f) sliceParam->LongSliceFlags.fields.f = slice->f
 #define FILL_LONG_SLICE(f) sliceParam->LongSliceFlags.fields.slice_##f = slice->f
     //how to fill this
     //LastSliceOfPic
     FILL_LONG(dependent_slice_segment_flag);
+
+    //follow spec
+    if (!slice->dependent_slice_segment_flag) {
+        slice = m_prevSlice;
+    }
+
+    if (!fillReferenceIndex(sliceParam, slice))
+        return false;
+
     FILL_LONG_SLICE(type);
     sliceParam->LongSliceFlags.fields.color_plane_id = slice->colour_plane_id;
     FILL_LONG_SLICE(sao_luma_flag);
@@ -967,7 +975,7 @@ Decode_Status VaapiDecoderH265::decodeSlice(H265NalUnit *nalu)
     if (!m_current)
         return DECODE_FAIL;
     status = fillSlice(m_current, slice, nalu);
-    if (status == DECODE_SUCCESS)
+    if (status == DECODE_SUCCESS && slice->dependent_slice_segment_flag)
         std::swap(m_currSlice, m_prevSlice);
     return status;
 
