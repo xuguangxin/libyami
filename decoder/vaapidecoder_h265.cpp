@@ -675,11 +675,11 @@ void VaapiDecoderH265::getRefPicList(RefSet& refset, const RefSet& stCurr0, cons
     //(8-8) and (8-10)
     while (rIdx < numRpsCurrTempList) {
         for(uint32_t i = 0; i < stCurr0.size() && rIdx < numRpsCurrTempList; rIdx++, i++ )
-            temp.push_back(stCurr0[rIdx]);
+            temp.push_back(stCurr0[i]);
         for(uint32_t i = 0; i < stCurr1.size() && rIdx < numRpsCurrTempList; rIdx++, i++ )
-            temp.push_back(stCurr1[rIdx]);
+            temp.push_back(stCurr1[i]);
         for(uint32_t i = 0; i < ltCurr.size() && rIdx < numRpsCurrTempList; rIdx++, i++ )
-            temp.push_back(ltCurr[rIdx]);
+            temp.push_back(ltCurr[i]);
     }
     refset.clear();
     refset.reserve(numActive);
