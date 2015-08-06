@@ -530,7 +530,7 @@ void VaapiDecoderH265::fillReference(VAPictureHEVC* refs, int32_t& n,
         r->pic_order_cnt = pic->m_poc;
         r->flags = flags;
         n++;
-        m_pocToIndex[pic->m_poc] = i;
+        m_pocToIndex[pic->m_poc] = n;
         ERROR("%d", pic->m_poc);
     }
 }
