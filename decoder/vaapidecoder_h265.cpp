@@ -618,9 +618,12 @@ bool VaapiDecoderH265::fillPicture(const PicturePtr& picture, const H265SliceHdr
     FILL(pps, log2_parallel_merge_level_minus2);
     FILL(pps, num_tile_columns_minus1);
     FILL(pps, num_tile_rows_minus1);
-#define COPY(f, c) memcpy(param->f, pps->f, (pps->c)*sizeof(pps->f[0]))
-    COPY(column_width_minus1, num_tile_columns_minus1);
-    COPY(row_height_minus1, num_tile_rows_minus1);
+    for (int i = 0; i <= pps->num_tile_columns_minus1; i++) {
+        param->column_width_minus1[i] = pps->column_width_minus1[i];
+    }
+    for (int i = 0; i <= pps->num_tile_rows_minus1; i++) {
+        param->row_height_minus1[i] = pps->row_height_minus1[1];
+    }
 
 
 #define FILL_SLICE(h, f)    param->slice_parsing_fields.bits.f = h->f
