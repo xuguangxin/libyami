@@ -699,7 +699,7 @@ uint8_t  VaapiDecoderH265::getIndex(int32_t poc)
     return m_pocToIndex[poc];
 }
 
-void VaapiDecoderH265::fillReferenceIndex(VASliceParameterBufferHEVC* sliceParam,
+void VaapiDecoderH265::fillReferenceIndexForList(VASliceParameterBufferHEVC* sliceParam,
     const RefSet& refset, bool isList0)
 {
     int n = isList0?0:1;
