@@ -726,7 +726,7 @@ bool VaapiDecoderH265::fillReferenceIndex(VASliceParameterBufferHEVC* sliceParam
             slice->ref_pic_list_modification.ref_pic_list_modification_flag_l0,
             slice->ref_pic_list_modification.list_entry_l0);
     }
-    fillReferenceIndex(sliceParam, refset, true);
+    fillReferenceIndexForList(sliceParam, refset, true);
 
     refset.clear();
     if (H265_IS_B_SLICE(slice)) {
@@ -735,7 +735,7 @@ bool VaapiDecoderH265::fillReferenceIndex(VASliceParameterBufferHEVC* sliceParam
             slice->ref_pic_list_modification.ref_pic_list_modification_flag_l1,
             slice->ref_pic_list_modification.list_entry_l1);
     }
-    fillReferenceIndex(sliceParam, refset, false);
+    fillReferenceIndexForList(sliceParam, refset, false);
 
     sliceParam->num_ref_idx_l0_active_minus1 = slice->num_ref_idx_l0_active_minus1;
     sliceParam->num_ref_idx_l1_active_minus1 = slice->num_ref_idx_l1_active_minus1;
