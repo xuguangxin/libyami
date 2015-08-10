@@ -622,7 +622,7 @@ bool VaapiDecoderH265::fillPicture(const PicturePtr& picture, const H265SliceHdr
         param->column_width_minus1[i] = pps->column_width_minus1[i];
     }
     for (int i = 0; i <= pps->num_tile_rows_minus1; i++) {
-        param->row_height_minus1[i] = pps->row_height_minus1[1];
+        param->row_height_minus1[i] = pps->row_height_minus1[i];
     }
 
 
