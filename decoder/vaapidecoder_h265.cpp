@@ -87,6 +87,35 @@ bool isCra(const H265NalUnit* const nalu)
     return nalu->type == H265_NAL_SLICE_CRA_NUT;
 }
 
+
+#ifndef H265_NAL_SLICE_RSV_VCL_N10
+#define H265_NAL_SLICE_RSV_VCL_N10 10
+#endif
+
+#ifndef H265_NAL_SLICE_RSV_VCL_N12
+#define H265_NAL_SLICE_RSV_VCL_N12 12
+#endif
+
+#ifndef H265_NAL_SLICE_RSV_VCL_N14
+#define H265_NAL_SLICE_RSV_VCL_N14 14
+#endif
+
+bool isSublayerNoRef(const H265NalUnit* const nalu)
+{
+    static const uint8_t noRef[] = {
+        H265_NAL_SLICE_TRAIL_N,
+        H265_NAL_SLICE_TSA_N,
+        H265_NAL_SLICE_STSA_N,
+        H265_NAL_SLICE_RADL_N,
+        H265_NAL_SLICE_RASL_N,
+        H265_NAL_SLICE_RSV_VCL_N10,
+        H265_NAL_SLICE_RSV_VCL_N12,
+        H265_NAL_SLICE_RSV_VCL_N14
+    };
+    static const uint8_t* end  = noRef + N_ELEMENTS(sub);
+    return binary_search(noRef, end, nalu->type);
+}
+
 class VaapiDecPictureH265 : public VaapiDecPicture
 {
 public:
@@ -906,10 +935,6 @@ void VaapiDecoderH265::getPoc(const PicturePtr& picture,
     const H265PPS* const pps = slice->pps;
     const H265SPS* const sps = pps->sps;
 
-    uint8_t temporalID = nalu->temporal_id_plus1 - 1;
-    //fix me
-    ASSERT(!temporalID && "do not support high temporal id ");
-
     const uint16_t pocLsb = slice->pic_order_cnt_lsb;
     const int32_t MaxPicOrderCntLsb = 1 << (sps->log2_max_pic_order_cnt_lsb_minus4 + 4);
     int32_t picOrderCntMsb;
@@ -929,8 +954,10 @@ void VaapiDecoderH265::getPoc(const PicturePtr& picture,
     picture->m_poc = picOrderCntMsb + pocLsb;
     picture->m_pocLsb = pocLsb;
     ERROR("poc = %d", picture->m_poc);
+
+    uint8_t temporalID = nalu->temporal_id_plus1 - 1;
     //fixme:sub-layer non-reference picture.
-    if (!isRasl(nalu) || !isRadl(nalu)) {
+    if (!temporalID && !isRasl(nalu) &&  !isRadl(nalu) && !isSublayerNoRef(nalu)) {
         m_prevPicOrderCntMsb = picOrderCntMsb;
         m_prevPicOrderCntLsb = pocLsb;
     }
