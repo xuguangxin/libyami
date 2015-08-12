@@ -1002,7 +1002,7 @@ Decode_Status VaapiDecoderH265::decodeSlice(H265NalUnit *nalu)
             return status;
         m_current = createPicture(slice, nalu);
         if (!m_current || !m_dpb.init(m_current, slice, nalu, m_newStream))
-            return DECODE_MEMORY_FAIL;
+            return DECODE_FAIL;
         if (!fillPicture(m_current, slice))
             return DECODE_FAIL;
     }
@@ -1022,6 +1022,11 @@ Decode_Status VaapiDecoderH265::decodeNalu(H265NalUnit *nalu)
 
     if (H265_NAL_SLICE_TRAIL_N <= type && type <= H265_NAL_SLICE_CRA_NUT) {
         status = decodeSlice(nalu);
+        if (status == DECODE_FAIL) {
+            //ignore the decode slice failed
+            m_current.reset();
+            status = DECODE_SUCCESS;
+        }
     } else {
         status = decodeCurrent();
         if (status != DECODE_SUCCESS)
