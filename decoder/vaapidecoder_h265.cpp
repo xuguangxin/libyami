@@ -112,8 +112,8 @@ bool isSublayerNoRef(const H265NalUnit* const nalu)
         H265_NAL_SLICE_RSV_VCL_N12,
         H265_NAL_SLICE_RSV_VCL_N14
     };
-    static const uint8_t* end  = noRef + N_ELEMENTS(sub);
-    return binary_search(noRef, end, nalu->type);
+    static const uint8_t* end  = noRef + N_ELEMENTS(noRef);
+    return std::binary_search(noRef, end, nalu->type);
 }
 
 class VaapiDecPictureH265 : public VaapiDecPicture
