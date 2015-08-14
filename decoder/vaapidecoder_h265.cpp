@@ -794,7 +794,7 @@ void fillPredWedightTableL##n(VASliceParameterBufferHEVC* sliceParam, \
         const H265SliceHdr* slice, uint8_t chromaLog2WeightDenom) \
 { \
     const H265PredWeightTable& w = slice->pred_weight_table; \
-    for (int i = 0; i < sliceParam->num_ref_idx_l##n##_active_minus1; i++) { \
+    for (int i = 0; i <= sliceParam->num_ref_idx_l##n##_active_minus1; i++) { \
         if (w.luma_weight_l##n##_flag[i]) { \
                 sliceParam->delta_luma_weight_l##n[i] = w.delta_luma_weight_l##n[i]; \
                 sliceParam->luma_offset_l##n[i] = w.luma_offset_l##n[i];\
