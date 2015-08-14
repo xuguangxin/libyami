@@ -1003,7 +1003,7 @@ Decode_Status VaapiDecoderH265::decodeSlice(H265NalUnit *nalu)
         m_current = createPicture(slice, nalu);
         if (!m_current || !m_dpb.init(m_current, slice, nalu, m_newStream))
             return DECODE_FAIL;
-        if (!fillPicture(m_current, slice))
+        if (!fillPicture(m_current, slice) || !fillIqMatrix(m_current, slice))
             return DECODE_FAIL;
     }
     if (!m_current)
