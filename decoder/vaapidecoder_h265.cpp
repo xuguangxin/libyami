@@ -158,7 +158,7 @@ bool VaapiDecoderH265::DPB::initShortTermRef(RefSet& ref, int32_t currPoc,
         int32_t poc = currPoc + delta[i];
         VaapiDecPictureH265* pic = getPic(poc);
         if (!pic) {
-            ERROR("count find short ref %d for %d", poc, currPoc);
+            ERROR("can't find short ref %d for %d", poc, currPoc);
         } else {
             if (used[i])
                 ref.push_back(pic);
@@ -226,13 +226,13 @@ bool VaapiDecoderH265::DPB::initLongTermRef(const PicturePtr& picture, const H26
         }
         VaapiDecPictureH265* pic = getPic(poc, slice->delta_poc_msb_present_flag[i]);
         if (!pic) {
-            ERROR("count find long ref %d for %d", poc, picture->m_poc);
-            return false;
+            ERROR("can't find long ref %d for %d", poc, picture->m_poc);
+        } else {
+            if (used)
+                m_ltCurr.push_back(pic);
+            else
+                m_ltFoll.push_back(pic);
         }
-        if (used)
-            m_ltCurr.push_back(pic);
-        else
-            m_ltFoll.push_back(pic);
     }
     return true;
 
