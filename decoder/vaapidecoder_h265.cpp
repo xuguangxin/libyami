@@ -159,12 +159,12 @@ bool VaapiDecoderH265::DPB::initShortTermRef(RefSet& ref, int32_t currPoc,
         VaapiDecPictureH265* pic = getPic(poc);
         if (!pic) {
             ERROR("count find short ref %d for %d", poc, currPoc);
-            return false;
+        } else {
+            if (used[i])
+                ref.push_back(pic);
+            else
+                m_stFoll.push_back(pic);
         }
-        if (used[i])
-            ref.push_back(pic);
-        else
-            m_stFoll.push_back(pic);
     }
     return true;
 }
