@@ -127,7 +127,7 @@ private:
 
     bool fillReferenceIndex(VASliceParameterBufferHEVC*, const H265SliceHdr* const);
     void fillReferenceIndexForList(VASliceParameterBufferHEVC*, const RefSet&, bool isList0);
-    void getRefPicList(RefSet& refset, const RefSet& stCurr0, const RefSet& stCurr1,
+    bool getRefPicList(RefSet& refset, const RefSet& stCurr0, const RefSet& stCurr1,
                        uint8_t numActive, bool modify, const uint32_t* modiList);
     uint8_t getIndex(int32_t poc);
 

@@ -697,13 +697,15 @@ bool VaapiDecoderH265::fillPicture(const PicturePtr& picture, const H265SliceHdr
     return true;
 }
 
-void VaapiDecoderH265::getRefPicList(RefSet& refset, const RefSet& stCurr0, const RefSet& stCurr1,
+bool VaapiDecoderH265::getRefPicList(RefSet& refset, const RefSet& stCurr0, const RefSet& stCurr1,
     uint8_t numActive, bool modify, const uint32_t* modiList)
 {
     const RefSet& ltCurr = m_dpb.m_ltCurr;
     uint8_t numPocTotalCurr = stCurr0.size() + stCurr1.size() + ltCurr.size();
-    if (!numPocTotalCurr)
-        return;
+    if (numActive && !numPocTotalCurr) {
+        ERROR("active refs is %d, but num numPocTotalCurr is %d", numActive, numPocTotalCurr);
+        return false;
+    }
     uint8_t numRpsCurrTempList = std::max(numPocTotalCurr, numActive);
     RefSet temp;
     temp.reserve(numRpsCurrTempList);
@@ -728,6 +730,7 @@ void VaapiDecoderH265::getRefPicList(RefSet& refset, const RefSet& stCurr0, cons
             ERROR("can't get idx from temp ref, modify = %d, idx = %d, iIdx = %d", modify, idx, rIdx);
         }
     }
+    return true;
 }
 
 uint8_t  VaapiDecoderH265::getIndex(int32_t poc)
@@ -757,19 +760,23 @@ bool VaapiDecoderH265::fillReferenceIndex(VASliceParameterBufferHEVC* sliceParam
 
     RefSet refset;
     if (!H265_IS_I_SLICE(slice)) {
-        getRefPicList(refset, before, after,
+        if (!getRefPicList(refset, before, after,
             slice->num_ref_idx_l0_active_minus1 + 1,
             slice->ref_pic_list_modification.ref_pic_list_modification_flag_l0,
-            slice->ref_pic_list_modification.list_entry_l0);
+            slice->ref_pic_list_modification.list_entry_l0)) {
+            return false;
+        }
     }
     fillReferenceIndexForList(sliceParam, refset, true);
 
     refset.clear();
     if (H265_IS_B_SLICE(slice)) {
-        getRefPicList(refset, after, before,
+        if (!getRefPicList(refset, after, before,
             slice->num_ref_idx_l1_active_minus1 + 1,
             slice->ref_pic_list_modification.ref_pic_list_modification_flag_l1,
-            slice->ref_pic_list_modification.list_entry_l1);
+            slice->ref_pic_list_modification.list_entry_l1)) {
+            return false;
+        }
     }
     fillReferenceIndexForList(sliceParam, refset, false);
 
