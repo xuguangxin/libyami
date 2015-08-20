@@ -528,13 +528,17 @@ bool VaapiDecoderH265::fillIqMatrix(const PicturePtr& picture, const H265SliceHd
     H265ScalingList* scalingList;
     if (pps->scaling_list_data_present_flag) {
         scalingList = &pps->scaling_list;
-    } else if (sps->scaling_list_enabled_flag
-               && sps->scaling_list_data_present_flag) {
-        scalingList = &sps->scaling_list;
+    } else if(sps->scaling_list_enabled_flag) {
+        if(sps->scaling_list_data_present_flag) {
+            scalingList = &sps->scaling_list;
+        } else {
+            scalingList = &pps->scaling_list;
+        }
     } else {
         //default scaling list
         return true;
     }
+
     VAIQMatrixBufferHEVC* iqMatrix;
     if (!picture->editIqMatrix(iqMatrix))
         return false;
