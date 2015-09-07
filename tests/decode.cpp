@@ -115,6 +115,8 @@ int main(int argc, char** argv)
             }
             // resend the buffer
             status = decoder->decode(&inputBuffer);
+        } else if(DECODE_INVALID_DATA == status) {
+            break;
         }
 
         renderOutputFrames(output, frameCount);

@@ -935,6 +935,8 @@ Decode_Status VaapiDecoderH265::ensureContext(const H265SPS* const sps)
         m_configBuffer.flag &= ~USE_NATIVE_GRAPHIC_BUFFER;
         m_configBuffer.surfaceNumber = surfaceNumber;
         status = VaapiDecoderBase::start(&m_configBuffer);
+        if(!m_context)
+            return DECODE_INVALID_DATA;
         if (status != DECODE_SUCCESS)
             return status;
         return DECODE_FORMAT_CHANGE;
@@ -1050,6 +1052,10 @@ Decode_Status VaapiDecoderH265::decodeNalu(H265NalUnit *nalu)
             //ignore the decode slice failed
             m_current.reset();
             status = DECODE_SUCCESS;
+        } else if(status == DECODE_INVALID_DATA) {
+            //apply for some necessary resources failed,
+            //we do not need to decode again
+            m_current.reset();
         }
     } else {
         status = decodeCurrent();
