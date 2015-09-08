@@ -243,11 +243,11 @@ class DrmRenderer
 		  unsigned int sec, unsigned int usec, void *data);
         void pageFlipHandler();
 
-        //sync to time
-        void waitingRenderTime();
+        //sync to time, return true if late
+        bool waitingRenderTime();
 
 
-
+        VADisplay  m_display;
         int        m_fd;
         uint32_t   m_crtcID;
 
@@ -324,7 +324,7 @@ private:
 };
 
 DrmRenderer::Flipper::Flipper(DrmRenderer* r)
-    :m_fd(r->m_fd), m_crtcID(r->m_crtcID),
+    :m_display(r->m_display), m_fd(r->m_fd), m_crtcID(r->m_crtcID),
      m_fronts(r->m_fronts),m_backs(r->m_backs), m_current(r->m_current), m_quit(false), m_pending(false),
      m_cond(r->m_cond), m_lock(r->m_lock),
      m_thread(-1), m_firstFrame(true), m_fps(r->m_fps)
@@ -352,10 +352,11 @@ bool DrmRenderer::Flipper::init()
     return true;
 }
 
-void DrmRenderer::Flipper::waitingRenderTime()
+bool DrmRenderer::Flipper::waitingRenderTime()
 {
+    bool late = false;
     if (!m_fps)
-        return;
+        return late;
     timeval current;
     if (m_firstFrame) {
         m_firstFrame = false;
@@ -363,20 +364,46 @@ void DrmRenderer::Flipper::waitingRenderTime()
         m_duration.tv_sec = 0;
         m_duration.tv_usec = 1000 * 1000  / m_fps;
     } else {
-        gettimeofday(&current, NULL);
-        if (timercmp(&current, &m_nextTime, <)) {
-            timeval sleepTime;
-            timersub(&m_nextTime, &current, &sleepTime);
-            usleep(sleepTime.tv_usec);
-        } else {
-            timeval lag;
-            timersub(&current, &m_nextTime, &lag);
-            double seconds = lag.tv_sec + ((double)m_duration.tv_usec)/(1000*1000);
-            ERROR("lag: %.2f seconds", seconds);
-        }
+        bool neverSleep = true;
+        do {
+            gettimeofday(&current, NULL);
+            timeval refresh;
+            refresh.tv_sec = 0;
+            refresh.tv_usec = 1000 * 1000  / 60;
+            timeval nextRefresh;
+            timeradd(&current, &refresh, &nextRefresh);
+
+            if (timercmp(&nextRefresh, &m_nextTime, <)) {
+                usleep(refresh.tv_usec);
+                neverSleep = false;
+            } else {
+                if (neverSleep) {
+                    late = !timercmp(&current, &m_nextTime, <);
+                }
+                break;
+            }
+
+        } while (1);
+            /*
+            if (timercmp(&current, &m_nextTime, <)) {
+                timeval sleepTime;
+                timersub(&m_nextTime, &current, &sleepTime);
+                if (timercmp(&sleepTime, &m_duration, >)) {
+                    double seconds = sleepTime.tv_sec + ((double)sleepTime.tv_usec)/(1000*1000);
+                    ERROR("sleep: %.4f seconds", seconds);
+                    usleep(sleepTime.tv_usec);
+                }
+            } else {
+                timeval lag;
+                timersub(&current, &m_nextTime, &lag);
+                double seconds = lag.tv_sec + ((double)lag.tv_usec)/(1000*1000);
+                ERROR("lag: %.4f seconds", seconds);
+                late = true;
+            }*/
     }
     current = m_nextTime;
     timeradd(&current, &m_duration, &m_nextTime);
+    return late;
 }
 
 bool DrmRenderer::Flipper::flip_l()
@@ -395,8 +422,8 @@ void DrmRenderer::Flipper::pageFlipHandler()
     m_current = m_fronts.front();
     m_fronts.pop_front();
     m_pending = false;
-    //notify others
-    m_cond.signal();
+    //notify all
+    m_cond.broadcast();
 
 }
 
@@ -416,9 +443,14 @@ void DrmRenderer::Flipper::loop()
                 return;
             m_cond.wait();
         }
+        VASurfaceID id = (VASurfaceID)m_fronts.front()->surface;
         m_lock.release();
-        waitingRenderTime();
+        checkVaapiStatus(vaSyncSurface(m_display, id), "vaSyncSurface");
+        bool late = waitingRenderTime();
         m_lock.acquire();
+        if (late) {
+            ERROR("late m_fronts.size = %d", (int)m_fronts.size());
+        }
         m_pending = true;
         flip_l();
     }
