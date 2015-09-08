@@ -354,7 +354,6 @@ bool DrmRenderer::Flipper::init()
 
 void DrmRenderer::Flipper::waitingRenderTime()
 {
-    ERROR("fps = %d", m_fps);
     if (!m_fps)
         return;
     timeval current;
