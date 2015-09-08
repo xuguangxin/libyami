@@ -409,7 +409,7 @@ void DrmRenderer::Flipper::loop()
         waitingRenderTime();
         AutoLock lock(m_lock);
         while (m_fronts.empty() || m_pending) {
-            if (m_quit)
+            if (m_fronts.empty() && m_quit)
                 return;
             m_cond.wait();
         }
