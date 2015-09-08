@@ -410,13 +410,15 @@ void* DrmRenderer::Flipper::start(void* flipper)
 void DrmRenderer::Flipper::loop()
 {
     while (1) {
-        waitingRenderTime();
         AutoLock lock(m_lock);
         while (m_fronts.empty() || m_pending) {
             if (m_fronts.empty() && m_quit)
                 return;
             m_cond.wait();
         }
+        m_lock.release();
+        waitingRenderTime();
+        m_lock.acquire();
         m_pending = true;
         flip_l();
     }
