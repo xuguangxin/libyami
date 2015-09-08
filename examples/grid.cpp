@@ -225,6 +225,8 @@ class DrmRenderer
 
     friend void ::pageFlipHandler(int fd, unsigned int frame,
 		  unsigned int sec, unsigned int usec, void *data);
+    friend void ::vblankHandler(int fd, unsigned int frame,
+		  unsigned int sec, unsigned int usec, void *data);
     class Flipper {
     public:
         Flipper(DrmRenderer* render);
@@ -232,30 +234,32 @@ class DrmRenderer
         bool init();
 
     private:
-        //thread loop
-        static void* start(void*);
-        void loop();
-
         //flip buffer and wait it done
         bool flip_l();
+
+        bool timeToFlip();
+        void advanceTimeStamp();
 
         friend void ::pageFlipHandler(int fd, unsigned int frame,
 		  unsigned int sec, unsigned int usec, void *data);
         void pageFlipHandler();
 
-        //sync to time, return true if late
-        bool waitingRenderTime();
+        friend void ::vblankHandler(int fd, unsigned int frame,
+		  unsigned int sec, unsigned int usec, void *data);
+        void vblankHandler();
 
+        void scheduleVblankNotify();
 
         VADisplay  m_display;
         int        m_fd;
         uint32_t   m_crtcID;
+        uint32_t   m_crtcFlag;
 
         //all protected by m_lock;
         FrameQueue& m_fronts;
         FrameQueue& m_backs;
         SharedPtr<DrmFrame>& m_current;
-        bool       m_quit;
+        bool&      m_flushing;
         bool       m_pending;
 
         Condition& m_cond;
@@ -268,6 +272,9 @@ class DrmRenderer
         timeval    m_nextTime;
         timeval    m_duration;
         int        m_fps;
+        int        m_vblankCount;
+
+        timeval    m_start;
     };
 public:
     ///init the render;
@@ -321,42 +328,57 @@ private:
     SharedPtr<Flipper>    m_flipper;
     int m_frameCount;
     int m_fps;
+    bool m_flushing;
 };
 
 DrmRenderer::Flipper::Flipper(DrmRenderer* r)
     :m_display(r->m_display), m_fd(r->m_fd), m_crtcID(r->m_crtcID),
-     m_fronts(r->m_fronts),m_backs(r->m_backs), m_current(r->m_current), m_quit(false), m_pending(false),
+     m_fronts(r->m_fronts),m_backs(r->m_backs), m_current(r->m_current), m_flushing(r->m_flushing), m_pending(false),
      m_cond(r->m_cond), m_lock(r->m_lock),
-     m_thread(-1), m_firstFrame(true), m_fps(r->m_fps)
+     m_thread(-1), m_firstFrame(true), m_fps(r->m_fps), m_vblankCount(0)
 {
+    uint32_t idx = r->m_crtcIndex;
+    if (!idx) {
+        m_crtcFlag = 0;
+    } else if (idx == 1) {
+        m_crtcFlag = DRM_VBLANK_SECONDARY;
+    } else {
+        if (DRM_VBLANK_HIGH_CRTC_MASK == 0x0000003e) {
+            m_crtcFlag = idx << 1;
+        } else {
+            ERROR("invalid DRM_VBLANK_HIGH_CRTC_MASK");
+            m_crtcFlag = 0;
+        }
+    }
+    ERROR("crtc flag = %x, fps = %d", m_crtcFlag, m_fps);
 
 }
 
 DrmRenderer::Flipper::~Flipper()
 {
-    {
-        AutoLock lock(m_lock);
-        m_quit = true;
-        m_cond.signal();
-    }
-    if (m_thread != -1)
-        pthread_join(m_thread, NULL);
+}
+
+void DrmRenderer::Flipper::scheduleVblankNotify()
+{
+    drmVBlank vbl;
+    vbl.request.type = static_cast<drmVBlankSeqType>(DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT | DRM_VBLANK_FLIP| m_crtcFlag);
+    vbl.request.sequence = 1;
+    vbl.request.signal = (unsigned long) this;
+    int ret = drmWaitVBlank(m_fd, &vbl);
+    if (ret != 0)
+        drmError(ret, "wait vblank failed");
 }
 
 bool DrmRenderer::Flipper::init()
 {
-    if (pthread_create(&m_thread, NULL, start, this)) {
-        ERROR("create thread failed");
-        return false;
-    }
+    scheduleVblankNotify();
     return true;
 }
 
-bool DrmRenderer::Flipper::waitingRenderTime()
+bool DrmRenderer::Flipper::timeToFlip()
 {
-    bool late = false;
     if (!m_fps)
-        return late;
+        return true;
     timeval current;
     if (m_firstFrame) {
         m_firstFrame = false;
@@ -364,46 +386,18 @@ bool DrmRenderer::Flipper::waitingRenderTime()
         m_duration.tv_sec = 0;
         m_duration.tv_usec = 1000 * 1000  / m_fps;
     } else {
-        bool neverSleep = true;
-        do {
-            gettimeofday(&current, NULL);
-            timeval refresh;
-            refresh.tv_sec = 0;
-            refresh.tv_usec = 1000 * 1000  / 60;
-            timeval nextRefresh;
-            timeradd(&current, &refresh, &nextRefresh);
-
-            if (timercmp(&nextRefresh, &m_nextTime, <)) {
-                usleep(refresh.tv_usec);
-                neverSleep = false;
-            } else {
-                if (neverSleep) {
-                    late = !timercmp(&current, &m_nextTime, <);
-                }
-                break;
-            }
-
-        } while (1);
-            /*
-            if (timercmp(&current, &m_nextTime, <)) {
-                timeval sleepTime;
-                timersub(&m_nextTime, &current, &sleepTime);
-                if (timercmp(&sleepTime, &m_duration, >)) {
-                    double seconds = sleepTime.tv_sec + ((double)sleepTime.tv_usec)/(1000*1000);
-                    ERROR("sleep: %.4f seconds", seconds);
-                    usleep(sleepTime.tv_usec);
-                }
-            } else {
-                timeval lag;
-                timersub(&current, &m_nextTime, &lag);
-                double seconds = lag.tv_sec + ((double)lag.tv_usec)/(1000*1000);
-                ERROR("lag: %.4f seconds", seconds);
-                late = true;
-            }*/
+        gettimeofday(&current, NULL);
+        if (timercmp(&current, &m_nextTime, <)) {
+            return false;
+        }
     }
-    current = m_nextTime;
+    return true;
+}
+
+void DrmRenderer::Flipper::advanceTimeStamp()
+{
+    timeval current = m_nextTime;
     timeradd(&current, &m_duration, &m_nextTime);
-    return late;
 }
 
 bool DrmRenderer::Flipper::flip_l()
@@ -422,39 +416,44 @@ void DrmRenderer::Flipper::pageFlipHandler()
     m_current = m_fronts.front();
     m_fronts.pop_front();
     m_pending = false;
-    //notify all
-    m_cond.broadcast();
+    m_cond.signal();
 
 }
 
-void* DrmRenderer::Flipper::start(void* flipper)
+void DrmRenderer::Flipper::vblankHandler()
 {
-    Flipper* f = (Flipper*)flipper;
-    f->loop();
-    return NULL;
-}
+    AutoLock lock(m_lock);
+    if (m_fronts.empty()) {
+        if (m_flushing) {
+            m_flushing = false;
+            m_cond.signal();
+            //no need schudule vblank
+            return;
+        }
+    } else {
+        if (timeToFlip()) {
+                        m_vblankCount++;
+            ERROR("vblank %d, pending = %d", m_vblankCount, (int)m_pending);
+            if (m_vblankCount == 60) {
+                timeval current;
+                gettimeofday(&current, NULL);
+                double t = current.tv_sec + current.tv_usec * 1e-6 - (m_start.tv_sec + m_start.tv_usec * 1e-6);
+                ERROR("fps = %.02f", m_vblankCount/t);
+                m_start = current;
+                m_vblankCount = 0;
+            }
 
-void DrmRenderer::Flipper::loop()
-{
-    while (1) {
-        AutoLock lock(m_lock);
-        while (m_fronts.empty() || m_pending) {
-            if (m_fronts.empty() && m_quit)
-                return;
-            m_cond.wait();
-        }
-        VASurfaceID id = (VASurfaceID)m_fronts.front()->surface;
-        m_lock.release();
-        checkVaapiStatus(vaSyncSurface(m_display, id), "vaSyncSurface");
-        bool late = waitingRenderTime();
-        m_lock.acquire();
-        if (late) {
-            ERROR("late m_fronts.size = %d", (int)m_fronts.size());
-        }
-        m_pending = true;
-        flip_l();
+            if (!m_pending) {
+                m_pending = true;
+                advanceTimeStamp();
+                flip_l();
+            }
+       }
+
     }
+    scheduleVblankNotify();
 }
+
 
 FlipNotifier::FlipNotifier(int fd)
     :m_fd(fd)
@@ -490,6 +489,13 @@ bool FlipNotifier::init()
         ERROR("create thread failed");
         return false;
     }
+    pthread_attr_t attr;
+    int policy = 0;
+
+    pthread_attr_init(&attr);
+    int maxPriority = pthread_attr_getschedpolicy(&attr, &policy);
+    pthread_setschedprio(m_thread, maxPriority);
+    pthread_attr_destroy(&attr);
     return true;
 }
 
@@ -506,6 +512,13 @@ void pageFlipHandler(int fd, unsigned int frame, unsigned int sec, unsigned int 
     f->pageFlipHandler();
 }
 
+void vblankHandler(int fd, unsigned int frame, unsigned int sec, unsigned int usec, void *data)
+{
+    DrmRenderer::Flipper* f = (DrmRenderer::Flipper*)data;
+    f->vblankHandler();
+
+}
+
 void FlipNotifier::loop()
 {
     drmEventContext evctx;
@@ -513,7 +526,9 @@ void FlipNotifier::loop()
     memset(&evctx, 0, sizeof evctx);
     evctx.version = DRM_EVENT_CONTEXT_VERSION;
     evctx.page_flip_handler = pageFlipHandler;
+    evctx.vblank_handler = vblankHandler;
     int nfds = std::max(m_fd, m_pipe[0]) + 1;
+
     while (1) {
         FD_ZERO(&fds);
         FD_SET(m_fd, &fds);
@@ -538,7 +553,7 @@ void FlipNotifier::loop()
 }
 
 DrmRenderer::DrmRenderer(VADisplay display, int fd, int displayIdx, int fps)
-    :m_display(display), m_fd(fd), m_displayIdx(displayIdx), m_cond(m_lock), m_frameCount(0), m_fps(fps)
+    :m_display(display), m_fd(fd), m_displayIdx(displayIdx), m_cond(m_lock), m_frameCount(0), m_fps(fps), m_flushing(false)
 {
 }
 
@@ -676,7 +691,7 @@ bool DrmRenderer::init()
 {
     if (!initDrm())
         return false;
-    if (!createFrames(m_mode.hdisplay, m_mode.vdisplay, 5) || !setPlane())
+    if (!createFrames(m_mode.hdisplay, m_mode.vdisplay, 8) || !setPlane())
         return false;
     ERROR("display %d: %dx%d@%d", m_displayIdx, m_mode.hdisplay, m_mode.vdisplay, m_mode.vrefresh);
     return true;
@@ -701,9 +716,9 @@ bool DrmRenderer::queue(const SharedPtr<VideoFrame>& vframe)
         ERROR("invalid frame queued");
         return false;
     }
+    vaSyncSurface(m_display, (VASurfaceID)vframe->surface);
     AutoLock lock(m_lock);
     m_fronts.push_back(frame);
-    m_cond.signal();
     if (!m_flipper && m_backs.empty()) {
         return createFlipper();
     }
@@ -727,7 +742,8 @@ bool DrmRenderer::discard(const SharedPtr<VideoFrame>& vframe)
 void DrmRenderer::flush()
 {
     AutoLock lock(m_lock);
-    while (!m_fronts.empty())
+    m_flushing = true;
+    while (!m_fronts.empty() || m_flushing)
         m_cond.wait();
 }
 
@@ -848,7 +864,7 @@ private:
             if (m_singleThread) {
                 input = decodeInput;
             } else {
-                input = VppInputAsync::create(decodeInput, 3);
+                input = VppInputAsync::create(decodeInput, 8);
                 if (!input) {
                     ERROR("can't create async input");
                     return false;
