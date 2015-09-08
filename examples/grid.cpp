@@ -354,7 +354,6 @@ bool DrmRenderer::Flipper::init()
 
 void DrmRenderer::Flipper::waitingRenderTime()
 {
-    ERROR("fps = %d", m_fps);
     if (!m_fps)
         return;
     timeval current;
@@ -369,6 +368,11 @@ void DrmRenderer::Flipper::waitingRenderTime()
             timeval sleepTime;
             timersub(&m_nextTime, &current, &sleepTime);
             usleep(sleepTime.tv_usec);
+        } else {
+            timeval lag;
+            timersub(&current, &m_nextTime, &lag);
+            double seconds = lag.tv_sec + ((double)m_duration.tv_usec)/(1000*1000);
+            ERROR("lag: %.2f seconds", seconds);
         }
     }
     current = m_nextTime;
