@@ -90,7 +90,7 @@ private:
     int m_bo;
     uint32_t m_handle;
     uint32_t m_pitch;
-    static const uint32_t BPP = 32;
+    static const uint32_t BPP = 16;
 };
 
 DrmFrame::DrmFrame(VADisplay display, int fd, uint32_t width, uint32_t height)
@@ -100,6 +100,8 @@ DrmFrame::DrmFrame(VADisplay display, int fd, uint32_t width, uint32_t height)
     VideoFrame* frame = static_cast<VideoFrame*>(this);
     memset(frame, 0, sizeof(VideoFrame));
     frame->surface = static_cast<intptr_t>(VA_INVALID_ID);
+    frame->crop.width = width;
+    frame->crop.height = height;
 }
 
 bool DrmFrame::createBo()
@@ -119,9 +121,20 @@ bool DrmFrame::createBo()
 
 bool DrmFrame::addToFb()
 {
-    int ret = drmModeAddFB(m_fd, m_width, m_height, 24,
-            BPP, m_pitch, m_bo, &m_handle);
-    return checkDrmRet(ret, "drmModeAddFB");
+    uint32_t bo[4];
+    uint32_t pitches[4];
+    uint32_t offsets[4];
+    memset(&bo, 0, sizeof(bo));
+    bo[0] = m_bo;
+    memset(&pitches, 0, sizeof(pitches));
+    pitches[0] = m_pitch;
+    memset(&offsets, 0, sizeof(offsets));
+
+    int ret = drmModeAddFB2(m_fd, m_width, m_height, DRM_FORMAT_YUYV,bo, pitches, offsets,
+        &m_handle, 0);
+/*    int ret = drmModeAddFB(m_fd, m_width, m_height, 24,
+            BPP, m_pitch, m_bo, &m_handle);*/
+    return checkDrmRet(ret, "drmModeAddFB2");
 }
 
 //bind m_bo to VaSurface.
@@ -140,7 +153,7 @@ bool DrmFrame::bindToVaSurface()
     VASurfaceAttribExternalBuffers external;
     unsigned long handle = (unsigned long)arg.name;
     memset(&external, 0, sizeof(external));
-    external.pixel_format = VA_FOURCC_BGRX;
+    external.pixel_format = VA_FOURCC_YUY2;
     external.width = m_width;
     external.height = m_height;
     external.data_size = m_width * m_height * BPP / 8;
@@ -161,7 +174,7 @@ bool DrmFrame::bindToVaSurface()
     attribs[1].value.value.p = &external;
 
     VASurfaceID id;
-    VAStatus vaStatus = vaCreateSurfaces(m_display, VA_RT_FORMAT_RGB32, m_width, m_height,
+    VAStatus vaStatus = vaCreateSurfaces(m_display, VA_RT_FORMAT_YUV422, m_width, m_height,
                                            &id, 1,attribs, N_ELEMENTS(attribs));
     if (!checkVaapiStatus(vaStatus, "vaCreateSurfaces"))
         return false;
@@ -456,7 +469,7 @@ void DrmRenderer::Flipper::loop()
         bool late = waitingRenderTime();
         m_lock.acquire();
         if (late) {
-            ERROR("late m_fronts.size = %d", (int)m_fronts.size());
+            //ERROR("late m_fronts.size = %d", (int)m_fronts.size());
         }
         m_pending = true;
         flip_l();
@@ -537,7 +550,7 @@ void FlipNotifier::loop()
             ERROR("select failed");
             return;
         } else if (!retval) {
-            ERROR("select timeout, ignore it");
+            //ERROR("select timeout, ignore it");
         } else {
             if (FD_ISSET(m_fd, &fds)) {
                 //drmHandleEvent(m_fd, &evctx);
@@ -632,7 +645,7 @@ bool DrmRenderer::getPlane()
         if (plane) {
             if (plane->possible_crtcs & (1 << m_crtcIndex)) {
                 for (uint32_t j = 0; j < plane->count_formats; j++) {
-                    if (plane->formats[j] == DRM_FORMAT_XRGB8888) {
+                    if (plane->formats[j] == DRM_FORMAT_YUYV) {
                         m_planeID = plane->plane_id;
                         drmModeFreePlane(plane);
                         drmModeFreePlaneResources(planes);
@@ -653,10 +666,17 @@ bool DrmRenderer::setPlane()
     SharedPtr<DrmFrame> frame = m_backs.front();
     uint32_t handle = frame->getFbHandle();
     int ret;
-    ret = drmModeSetCrtc(m_fd, m_crtcID, handle, 0, 0, &m_connectorID, 1, &m_mode);
+   /*ret = drmModeSetCrtc(m_fd, m_crtcID, handle, 0, 0, &m_connectorID, 1, &m_mode);
     if (!checkDrmRet(ret, "drmModeSetCrtc"))
         return false;
-
+*/
+    int width = frame->crop.width;
+    int height = frame->crop.height;
+    ret = drmModeSetPlane(m_fd, m_planeID, m_crtcID, handle, 0,
+                    0, 0, width, height,
+                    0, 0, width<<16, height<<16);drmModeSetCrtc(m_fd, m_crtcID, handle, 0, 0, &m_connectorID, 1, &m_mode);
+    if (!checkDrmRet(ret, "drmModeSetCrtc"))
+        return false;
     m_backs.pop_front();
     m_current = frame;
     return true;
