@@ -250,6 +250,7 @@ class DrmRenderer
         VADisplay  m_display;
         int        m_fd;
         uint32_t   m_crtcID;
+        uint32_t   m_planeID;
 
         //all protected by m_lock;
         FrameQueue& m_fronts;
@@ -324,7 +325,7 @@ private:
 };
 
 DrmRenderer::Flipper::Flipper(DrmRenderer* r)
-    :m_display(r->m_display), m_fd(r->m_fd), m_crtcID(r->m_crtcID),
+    :m_display(r->m_display), m_fd(r->m_fd), m_crtcID(r->m_crtcID), m_planeID(r->m_planeID),
      m_fronts(r->m_fronts),m_backs(r->m_backs), m_current(r->m_current), m_quit(false), m_pending(false),
      m_cond(r->m_cond), m_lock(r->m_lock),
      m_thread(-1), m_firstFrame(true), m_fps(r->m_fps)
@@ -411,8 +412,14 @@ bool DrmRenderer::Flipper::flip_l()
     //start a flip.
     SharedPtr<DrmFrame>& frame = m_fronts.front();
     uint32_t handle = frame->getFbHandle();
-    int ret = drmModePageFlip(m_fd, m_crtcID, handle, DRM_MODE_PAGE_FLIP_EVENT, this);
-    return checkDrmRet(ret, "drmModePageFlip");
+//    int ret = drmModePageFlip(m_fd, m_crtcID, handle, DRM_MODE_PAGE_FLIP_EVENT, this);
+//    return checkDrmRet(ret, "drmModePageFlip");
+    int width = frame->crop.width;
+    int height = frame->crop.height;
+    int ret = drmModeSetPlane(m_fd, m_planeID, m_crtcID, handle, 0,
+                    0, 0, width, height,
+                    0, 0, width<<16, height<<16);
+    return checkDrmRet(ret, "drmModeSetPlane");
 }
 
 void DrmRenderer::Flipper::pageFlipHandler()
@@ -438,7 +445,7 @@ void DrmRenderer::Flipper::loop()
 {
     while (1) {
         AutoLock lock(m_lock);
-        while (m_fronts.empty() || m_pending) {
+        while (m_fronts.empty()) {
             if (m_fronts.empty() && m_quit)
                 return;
             m_cond.wait();
@@ -453,6 +460,12 @@ void DrmRenderer::Flipper::loop()
         }
         m_pending = true;
         flip_l();
+        m_backs.push_back(m_current);
+    m_current = m_fronts.front();
+    m_fronts.pop_front();
+    m_pending = false;
+    //notify all
+    m_cond.broadcast();
     }
 }
 
@@ -527,7 +540,7 @@ void FlipNotifier::loop()
             ERROR("select timeout, ignore it");
         } else {
             if (FD_ISSET(m_fd, &fds)) {
-                drmHandleEvent(m_fd, &evctx);
+                //drmHandleEvent(m_fd, &evctx);
             }
             if (FD_ISSET(m_pipe[0], &fds)) {
                 //request quit
@@ -906,6 +919,9 @@ private:
                     m_vpp->process(frame, dest);
                 }
             }
+            memset(&dest->crop, 0,sizeof(dest->crop));
+            dest->crop.width = m_width;
+            dest->crop.height = m_height;
             if (!m_renderer->queue(dest)) {
                 ERROR("queue to drm failed");
                 goto DONE;
