@@ -58,6 +58,26 @@ extern "C" {
 
 using namespace std;
 
+class Timer
+{
+public:
+    Timer(const char* str):m_str(str)
+    {
+        gettimeofday(&start, NULL);
+    }
+    ~Timer()
+    {
+        timeval end, diff;
+        gettimeofday(&end, NULL);
+        timersub(&end, &start, &diff);
+        if (diff.tv_usec > 999)
+            ERROR("%s: %d ms", m_str, (int)diff.tv_usec/1000);
+    }
+private:
+    timeval start;
+    const char* m_str;
+};
+
 bool checkDrmRet(int ret,const char* msg)
 {
     if (ret) {
@@ -269,6 +289,30 @@ class DrmRenderer
         timeval    m_duration;
         int        m_fps;
     };
+
+    class Syncer {
+    public:
+        Syncer(DrmRenderer* render);
+        ~Syncer();
+        bool init();
+    private:
+        static void* start(void* syncer);
+        void loop();
+        VADisplay   m_display;
+
+        //all protected by m_lock;
+        FrameQueue& m_fronts;
+        FrameQueue& m_renderings;
+
+        Condition&  m_cond;
+        Lock&       m_lock;
+
+        pthread_t  m_thread;
+
+        bool        m_quit;
+
+
+    };
 public:
     ///init the render;
     bool init();
@@ -315,10 +359,12 @@ private:
 
     Condition m_cond;
     Lock      m_lock;
-    FrameQueue m_backs;
-    FrameQueue m_fronts;
+    FrameQueue m_backs;  //free
+    FrameQueue m_fronts; // ready to display
+    FrameQueue m_renderings; //not synced
     SharedPtr<DrmFrame> m_current;
-    SharedPtr<Flipper>    m_flipper;
+    SharedPtr<Flipper>  m_flipper;
+    SharedPtr<Syncer>   m_syncer;
     int m_frameCount;
     int m_fps;
 };
@@ -337,7 +383,7 @@ DrmRenderer::Flipper::~Flipper()
     {
         AutoLock lock(m_lock);
         m_quit = true;
-        m_cond.signal();
+        m_cond.broadcast();
     }
     if (m_thread != -1)
         pthread_join(m_thread, NULL);
@@ -364,6 +410,25 @@ bool DrmRenderer::Flipper::waitingRenderTime()
         m_duration.tv_sec = 0;
         m_duration.tv_usec = 1000 * 1000  / m_fps;
     } else {
+        gettimeofday(&current, NULL);
+        if (timercmp(&current, &m_nextTime, <)) {
+            timeval diff;
+            timersub(&m_nextTime, &current, &diff);
+            {
+                Timer t("usleep");
+                usleep(diff.tv_usec);
+            }
+            ERROR("sleep %d ms", (int)diff.tv_usec/1000);
+        } else {
+            late = true;
+            timeval diff;
+            timersub(&current, &m_nextTime, &diff);
+
+            ERROR("late %d ms", (int)diff.tv_usec/1000);
+        }
+        #if 0
+        timeval diff;
+        timersub(m_nextTime, current,
         bool neverSleep = true;
         do {
             gettimeofday(&current, NULL);
@@ -384,6 +449,7 @@ bool DrmRenderer::Flipper::waitingRenderTime()
             }
 
         } while (1);
+        #endif
             /*
             if (timercmp(&current, &m_nextTime, <)) {
                 timeval sleepTime;
@@ -417,11 +483,13 @@ bool DrmRenderer::Flipper::flip_l()
 
 void DrmRenderer::Flipper::pageFlipHandler()
 {
+        ERROR("getlock");
     AutoLock lock(m_lock);
     m_backs.push_back(m_current);
     m_current = m_fronts.front();
     m_fronts.pop_front();
     m_pending = false;
+    ERROR("fps = %d, pending done", m_fps);
     //notify all
     m_cond.broadcast();
 
@@ -437,24 +505,94 @@ void* DrmRenderer::Flipper::start(void* flipper)
 void DrmRenderer::Flipper::loop()
 {
     while (1) {
+
         AutoLock lock(m_lock);
         while (m_fronts.empty() || m_pending) {
             if (m_fronts.empty() && m_quit)
                 return;
+            if (m_pending) {
+                ERROR("%d, time to render but it's pending",m_fps);
+            }
             m_cond.wait();
         }
-        VASurfaceID id = (VASurfaceID)m_fronts.front()->surface;
-        m_lock.release();
-        checkVaapiStatus(vaSyncSurface(m_display, id), "vaSyncSurface");
-        bool late = waitingRenderTime();
-        m_lock.acquire();
-        if (late) {
+//        m_lock.release();
+
+//        m_lock.acquire();
+        ERROR("%d, flip", m_fps);
+/*        if (late) {
             ERROR("late m_fronts.size = %d", (int)m_fronts.size());
-        }
+        }*/
         m_pending = true;
-        flip_l();
+        {
+            if (m_fps) {
+                Timer t("flip");
+                flip_l();
+            } else {
+                flip_l();
+            }
+        }
+
+         m_lock.release();
+        waitingRenderTime();
+        m_lock.acquire();
     }
 }
+
+DrmRenderer::Syncer::Syncer(DrmRenderer* r)
+    :m_display(r->m_display), m_fronts(r->m_fronts),m_renderings(r->m_renderings),
+     m_cond(r->m_cond), m_lock(r->m_lock),m_quit(false)
+{
+}
+
+DrmRenderer::Syncer::~Syncer()
+{
+    {
+        AutoLock lock(m_lock);
+        m_quit = true;
+        m_cond.broadcast();
+    }
+
+    if (m_thread != -1)
+        pthread_join(m_thread, NULL);
+}
+
+bool DrmRenderer::Syncer::init()
+{
+
+    if (pthread_create(&m_thread, NULL, start, this)) {
+        ERROR("create thread failed");
+        return false;
+    }
+    return true;
+}
+
+void* DrmRenderer::Syncer::start(void* syncer)
+{
+    Syncer* s = (Syncer*)syncer;
+    s->loop();
+    return NULL;
+}
+
+void DrmRenderer::Syncer::loop()
+{
+    while (1) {
+        AutoLock lock(m_lock);
+        if (m_renderings.empty()) {
+            if (m_quit)
+                return;
+            m_cond.wait();
+        } else {
+            SharedPtr<DrmFrame>& frame = m_renderings.front();
+            m_lock.release();
+            vaSyncSurface(m_display, (VASurfaceID)frame->surface);
+            m_lock.acquire();
+            m_fronts.push_back(frame);
+            m_renderings.pop_front();
+            m_cond.broadcast();
+        }
+    }
+}
+
 
 FlipNotifier::FlipNotifier(int fd)
     :m_fd(fd)
@@ -490,6 +628,13 @@ bool FlipNotifier::init()
         ERROR("create thread failed");
         return false;
     }
+    pthread_attr_t attr;
+    int policy = 0;
+
+    pthread_attr_init(&attr);
+    int maxPriority = pthread_attr_getschedpolicy(&attr, &policy);
+    pthread_setschedprio(m_thread, maxPriority);
+    pthread_attr_destroy(&attr);
     return true;
 }
 
@@ -676,10 +821,11 @@ bool DrmRenderer::init()
 {
     if (!initDrm())
         return false;
-    if (!createFrames(m_mode.hdisplay, m_mode.vdisplay, 5) || !setPlane())
+    if (!createFrames(m_mode.hdisplay, m_mode.vdisplay, 9) || !setPlane())
         return false;
     ERROR("display %d: %dx%d@%d", m_displayIdx, m_mode.hdisplay, m_mode.vdisplay, m_mode.vrefresh);
-    return true;
+    m_syncer.reset(new Syncer(this));
+    return m_syncer->init() && createFlipper();
 }
 
 SharedPtr<VideoFrame> DrmRenderer::dequeue()
@@ -702,11 +848,12 @@ bool DrmRenderer::queue(const SharedPtr<VideoFrame>& vframe)
         return false;
     }
     AutoLock lock(m_lock);
-    m_fronts.push_back(frame);
+    m_renderings.push_back(frame);
     m_cond.signal();
-    if (!m_flipper && m_backs.empty()) {
+    /*
+    if (!m_flipper && m_backs.empty() && m_renderings.empty()) {
         return createFlipper();
-    }
+    }*/
     return true;
 }
 
@@ -727,7 +874,7 @@ bool DrmRenderer::discard(const SharedPtr<VideoFrame>& vframe)
 void DrmRenderer::flush()
 {
     AutoLock lock(m_lock);
-    while (!m_fronts.empty())
+    while (!m_fronts.empty() && !m_renderings.empty())
         m_cond.wait();
 }
 
@@ -735,6 +882,7 @@ void DrmRenderer::flush()
 DrmRenderer::~DrmRenderer()
 {
     m_flipper.reset();
+    m_syncer.reset();
     int count = m_backs.size() + m_fronts.size();
     if (m_current)
         count++;
@@ -848,7 +996,7 @@ private:
             if (m_singleThread) {
                 input = decodeInput;
             } else {
-                input = VppInputAsync::create(decodeInput, 3);
+                input = VppInputAsync::create(decodeInput, 8);
                 if (!input) {
                     ERROR("can't create async input");
                     return false;
