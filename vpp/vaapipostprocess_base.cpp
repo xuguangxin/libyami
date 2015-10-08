@@ -38,6 +38,17 @@ YamiStatus  VaapiPostProcessBase::setNativeDisplay(const NativeDisplay& display)
     return initVA(display);
 }
 
+
+YamiStatus VaapiPostProcessBase::setParameters(VppParamType type, const void* params)
+{
+    return YAMI_NOT_IMPLEMENT;
+}
+
+YamiStatus VaapiPostProcessBase::getParameters(VppParamType type, void* params)
+{
+    return YAMI_NOT_IMPLEMENT;
+}
+
 YamiStatus VaapiPostProcessBase::initVA(const NativeDisplay& display)
 {
     if (m_context) {

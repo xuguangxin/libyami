@@ -1,5 +1,5 @@
 /*
- *  vaapipostprocess_scaler.h- base class for video post process
+ *  VideoVppDefs.h- basic defines for video post process
  *
  *  Copyright (C) 2015 Intel Corporation
  *    Author: XuGuangxin<Guangxin.Xu@intel.com>
@@ -20,26 +20,33 @@
  *  Boston, MA 02110-1301 USA
  */
 
-#ifndef vaapipostprocess_scaler_h
-#define vaapipostprocess_scaler_h
+#ifndef video_vpp_defs_h
+#define video_vpp_defs_h
+#include "VideoCommonDefs.h"
 
-#include "vaapipostprocess_base.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-namespace YamiMediaCodec{
+typedef enum {
+    VppParamsStartUnused = 0x01000000,
+    VppParamsAlphaBlending,
+}VppParamType;
 
-/* class for video scale and color space conversion */
-class VaapiPostProcessScaler : public VaapiPostProcessBase {
-public:
-    VaapiPostProcessScaler();
-    virtual YamiStatus process(const SharedPtr<VideoFrame>& src,
-                               const SharedPtr<VideoFrame>& dest);
+/* use this to disable alphablending */
+#define YAMI_BLEND_NONE                   0x0
+/* alpha blending flags see va_vpp.h for details */
+#define YAMI_BLEND_GLOBAL_ALPHA           0x0002
+/* per pixel alpha, need (RGBA) */
+#define YAMI_BLEND_PREMULTIPLIED_ALPHA    0x0008
 
-    YamiStatus setParameters(VppParamType type, const void* params);
-    YamiStatus getParameters(VppParamType type, void* params);
+typedef struct VppAlphaBlending {
+    uint32_t size;
+    uint32_t flag; /* see above*/
+    float    globalAlpha;
+} VppAlphaBlending;
 
-private:
-    VppAlphaBlending m_alpahBleding;
-    static const bool s_registered; // VaapiPostProcessFactory registration result
-};
+#ifdef __cplusplus
 }
-#endif                          /* vaapipostprocess_scaler_h */
+#endif
+#endif  //video_vpp_defs_h
