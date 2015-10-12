@@ -714,11 +714,66 @@ private:
     void renderOutputs()
     {
         SharedPtr<VideoFrame> frame;
+                SharedPtr<VideoFrame> frame1;
         FpsCalc fps;
-        int width = m_width / m_col;
-        int height = m_height / m_row;
+       // int width = m_width / m_col;
+        //int height = m_height / m_row;
+        //int width = 1920;
+        //int height = 816;
         do {
             SharedPtr<VideoFrame> dest = m_renderer->dequeue();
+            SharedPtr<VppInput>& input = m_inputs[0];
+                   if (!input->read(frame)) {
+                        m_renderer->discard(dest);
+                        m_renderer->flush();
+                        goto DONE;
+                    }
+
+            input = m_inputs[1];
+            input->read(frame1);
+            frame->crop.width /= 2;
+            frame->crop.height  /= 2;
+            frame1->crop.x =  0;
+            frame1->crop.y =  0;
+            frame1->crop.width =  frame->crop.width;
+            frame1->crop.height =  frame->crop.height;
+
+            VppAlphaBlending blend;
+            memset(&blend, 0, sizeof(blend));
+            blend.size = sizeof(blend);
+            blend.flag =YAMI_BLEND_GLOBAL_ALPHA;
+            blend.globalAlpha = 0.5;
+            if (m_vpp->setParameters(VppParamsAlphaBlending, &blend) != YAMI_SUCCESS) {
+                 ERROR("blending failed");
+            }
+            m_vpp->process(frame1, frame);
+
+
+            blend.flag = YAMI_BLEND_NONE;
+            if (m_vpp->setParameters(VppParamsAlphaBlending, &blend) != YAMI_SUCCESS) {
+                 ERROR("vpp failed");
+            }
+            frame->crop.width *= 2;
+            frame->crop.height *= 2;
+            frame1->crop.x =  0;
+            frame1->crop.y =  0;
+            frame1->crop.width *= 2;
+            frame1->crop.height *= 2;
+
+
+                                                dest->crop.x = 0;
+                        dest->crop.y = 0;
+                        dest->crop.width = m_width;
+                        dest->crop.height = m_height;
+            m_vpp->process(frame, dest);
+
+            m_vpp->process(frame1, frame);
+
+
+
+
+
+            /*
             for (int i = 0; i < m_row; i++) {
                 for (int j = 0; j < m_col; j++) {
                     SharedPtr<VppInput>& input = m_inputs[i * m_col + j];
@@ -727,17 +782,35 @@ private:
                         m_renderer->flush();
                         goto DONE;
                     }
-                    dest->crop.x = j * width;
-                    dest->crop.y = i * height;
-                    dest->crop.width = width;
-                    dest->crop.height = height;
+                    VppAlphaBlending blend;
+                    memset(&blend, 0, sizeof(blend));
+                    blend.size = sizeof(blend);
+                    if (i == 0 && j == 0) {
+                        dest->crop.x = 0;
+                        dest->crop.y = 0;
+                        dest->crop.width = m_width;
+                        dest->crop.height = m_height;
+                        blend.flag =YAMI_BLEND_NONE;
+                    } else {
+                        dest->crop.x = j * width;
+                        dest->crop.y = i * height;
+                        dest->crop.width = width;
+                        dest->crop.height = height;
+                        blend.flag =YAMI_BLEND_GLOBAL_ALPHA;
+                        blend.globalAlpha = 0.5;
+                    }
+                    if (YAMI_SUCCESS != m_vpp->setParameters(VppParamsAlphaBlending, &blend)) {
+                        ERROR("failed");
+                    }
                     m_vpp->process(frame, dest);
                 }
             }
+            */
             if (!m_renderer->queue(dest)) {
                 ERROR("queue to drm failed");
                 goto DONE;
             }
+            getchar();
 
             fps.addFrame();
         } while (1);
