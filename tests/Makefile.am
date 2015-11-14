@@ -3,7 +3,7 @@ INCLUDES = -I$(top_srcdir)
 if ENABLE_CAPI
 bin_PROGRAMS = decodecapi encodecapi
 else
-bin_PROGRAMS = yamidecode yamiencode yamivpp yamitranscode
+bin_PROGRAMS = 
 if ENABLE_V4L2
 bin_PROGRAMS += v4l2encode v4l2decode
 endif
@@ -140,16 +140,16 @@ endif
 encodecapi_LDADD	= $(CAPI_ENCODE_LIBS)
 encodecapi_SOURCES	= encodecapi.c encodehelp.h encodeinput.cpp encodeInputCamera.cpp encodeInputDecoder.cpp encodeInputCapi.cpp $(DECODE_INPUT_SOURCES)
 else
-yamidecode_LDADD	= $(YAMI_DECODE_LIBS)
-yamidecode_LDFLAGS	= $(YAMI_DECODE_LDFLAGS)
-yamidecode_SOURCES	= decode.cpp decodehelp.h $(DECODE_INPUT_SOURCES) decodeoutput.cpp
+#yamidecode_LDADD	= $(YAMI_DECODE_LIBS)
+#yamidecode_LDFLAGS	= $(YAMI_DECODE_LDFLAGS)
+#yamidecode_SOURCES	= decode.cpp decodehelp.h $(DECODE_INPUT_SOURCES) decodeoutput.cpp
 if ENABLE_TESTS_GLES
-yamidecode_SOURCES += ../egl/egl_util.c ./egl/gles2_help.c
+#yamidecode_SOURCES += ../egl/egl_util.c ./egl/gles2_help.c
 endif
 
-yamiencode_LDADD    = $(YAMI_ENCODE_LIBS)
-yamiencode_LDFLAGS  = $(YAMI_ENCODE_LDFLAGS)
-yamiencode_SOURCES  = encode.cpp encodeinput.cpp encodeInputCamera.cpp encodeInputDecoder.cpp $(DECODE_INPUT_SOURCES)
+#yamiencode_LDADD    = $(YAMI_ENCODE_LIBS)
+#yamiencode_LDFLAGS  = $(YAMI_ENCODE_LDFLAGS)
+#yamiencode_SOURCES  = encode.cpp encodeinput.cpp encodeInputCamera.cpp encodeInputDecoder.cpp $(DECODE_INPUT_SOURCES)
 
 v4l2decode_LDADD   = $(V4L2_DECODE_LIBS)
 v4l2decode_LDFLAGS = $(V4L2_DECODE_LDFLAGS)

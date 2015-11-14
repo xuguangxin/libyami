@@ -23,7 +23,7 @@ SUBDIRS += capi
 endif
 
 if ENABLE_TESTS
-SUBDIRS += tests
+#SUBDIRS += tests
 SUBDIRS += testscripts
-SUBDIRS += examples
 endif
+SUBDIRS += examples

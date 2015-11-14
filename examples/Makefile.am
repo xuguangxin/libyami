@@ -31,9 +31,6 @@ VPP_INPUT_SOURCES = \
 	$(top_builddir)/tests/vppinputdecode.cpp \
         $(top_builddir)/tests/vppinputasync.cpp \
 	$(top_builddir)/tests/vppoutputencode.cpp \
-	$(top_builddir)/tests/encodeinput.cpp \
-	$(top_builddir)/tests/encodeInputDecoder.cpp \
-	$(top_builddir)/tests/encodeInputCamera.cpp \
 	$(NULL)
 
 AM_CPPFLAGS = $(AM_CFLAGS)
