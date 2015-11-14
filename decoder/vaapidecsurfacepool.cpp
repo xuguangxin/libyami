@@ -161,108 +161,6 @@ private:
     VideoRenderBuffer* m_buffer;
 };
 
-bool VaapiDecSurfacePool::ensureImagePool(VideoFrameRawData &frame)
-{
-    if (m_imagePool)
-        return true;
-
-    if (!frame.width || !frame.height) {
-        frame.width = m_surfaces[0]->getWidth();
-        frame.height = m_surfaces[0]->getHeight();
-    }
-
-    DEBUG("create image pool with fourcc:%.4s, size=%dx%d", (char*)(&frame.fourcc), frame.width, frame.height);
-    m_imagePool = VaapiImagePool::create(m_display, frame.fourcc, frame.width, frame.height, IMAGE_POOL_SIZE);
-
-    ASSERT(m_imagePool);
-    return m_imagePool;
-}
-
-bool VaapiDecSurfacePool::exportFrame(ImagePtr image, VideoFrameRawData &frame, int64_t timeStamp)
-{
-    if (!image)
-        return false;
-
-    VideoDataMemoryType memoryType = frame.memoryType;
-    ImageRawPtr rawImage = mapVaapiImage(image, memoryType);
-
-    if (!rawImage)
-        return false;
-    if (memoryType == VIDEO_DATA_MEMORY_TYPE_RAW_COPY) {
-        return rawImage->copyTo((uint8_t *)frame.handle, frame.offset, frame.pitch);
-    }
-    if (!rawImage->getHandle(frame.handle, frame.offset, frame.pitch))
-        return false;
-
-    frame.width = image->getWidth();
-    frame.height = image->getHeight();
-    frame.internalID = image->getID();
-    frame.fourcc = image->getFormat();
-    frame.timeStamp = timeStamp;
-    frame.flags = VIDEO_FRAME_FLAGS_KEY;
-    {
-        AutoLock lock(m_exportFramesLock);
-        ExportFrame frm;
-        frm.rawImage = rawImage;
-        m_exportFrames[image->getID()] = frm;
-    }
-
-    return true;
-}
-
-bool VaapiDecSurfacePool::getOutput(VideoFrameRawData* frame)
-{
-    if (!frame)
-        return false;
-
-    VideoRenderBuffer *buffer = getOutput();
-
-    if (!buffer)
-        return false;
-
-    SurfacePtr surface;
-    VaapiSurface *srf = m_surfaceMap[buffer->surface];
-    ASSERT(srf);
-    surface.reset(srf, SurfaceRecyclerRender(shared_from_this(), buffer));
-
-    if (frame->memoryType == VIDEO_DATA_MEMORY_TYPE_SURFACE_ID) {
-        frame->handle = (intptr_t) surface->getDisplay()->getID();
-        frame->width = surface->getWidth();
-        frame->height = surface->getHeight();
-        frame->internalID = surface->getID();
-        frame->fourcc = 0; // XXX improve VaapiSurface to retireve real fourcc
-        frame->timeStamp = buffer->timeStamp;
-        {
-            AutoLock lock(m_exportFramesLock);
-            ExportFrame frm;
-            frm.surface = surface;
-            m_exportFrames[surface->getID()] = frm;
-        }
-        return true;
-    }
-
-    ImagePtr image = VaapiImage::derive(surface);
-    if (!image)
-        return false;
-
-    if (frame->fourcc && image->getFormat() != frame->fourcc) {
-        if (!m_imagePool && !ensureImagePool(*frame))
-            return false;
-
-        image = m_imagePool->acquireWithWait();
-        if (!image) {
-            DEBUG("No image available");
-            return false;
-        }
-        if (!surface->getImage(image)) {
-            ASSERT(0);
-            return false;
-        }
-    }
-
-    return exportFrame(image, *frame, buffer->timeStamp);
-}
-
 void VaapiDecSurfacePool::setWaitable(bool waitable)
 {
     m_flushing = !waitable;
@@ -270,8 +168,6 @@ void VaapiDecSurfacePool::setWaitable(bool waitable)
     if (!waitable) {
         m_cond.signal();
     }
-    if (m_imagePool)
-        m_imagePool->setWaitable(waitable);
 }
 
 void VaapiDecSurfacePool::flush()
@@ -318,16 +214,6 @@ void VaapiDecSurfacePool::recycle(const VideoRenderBuffer * renderBuf)
         return;
     }
     recycle(renderBuf->surface, SURFACE_RENDERING);
-}
-
-void VaapiDecSurfacePool::recycle(VideoFrameRawData* frame)
-{
-    AutoLock lock(m_exportFramesLock);
-
-    if (!frame || frame->memoryType == VIDEO_DATA_MEMORY_TYPE_RAW_COPY)
-        return;
-
-    m_exportFrames.erase(frame->internalID);
 }
 
 } //namespace YamiMediaCodec
