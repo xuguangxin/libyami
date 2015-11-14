@@ -28,6 +28,7 @@
 #endif
 #include "vaapidecoder_base.h"
 #include "common/log.h"
+#include "vaapi/vaapisurfaceallocator.h"
 #include "vaapi/vaapicontext.h"
 #include "vaapi/vaapidisplay.h"
 #include "vaapi/vaapiutils.h"
@@ -210,7 +211,7 @@ const VideoFormatInfo *VaapiDecoderBase::getFormatInfo(void)
 }
 
 Decode_Status
-    VaapiDecoderBase::setupVA(uint32_t numSurface, VAProfile profile)
+VaapiDecoderBase::setupVA(uint32_t numSurface, VAProfile profile)
 {
     INFO("base: setup VA");
 
@@ -218,16 +219,13 @@ Decode_Status
         return DECODE_SUCCESS;
     }
 
-    if (m_display != NULL) {
-        WARNING("VA is partially started.");
-        return DECODE_FAIL;
-    }
-
-    m_display = VaapiDisplay::create(m_externalDisplay);
-
     if (!m_display) {
-        ERROR("failed to create display");
-        return DECODE_FAIL;
+        m_display = VaapiDisplay::create(m_externalDisplay);
+
+        if (!m_display) {
+            ERROR("failed to create display");
+            return DECODE_FAIL;
+        }
     }
 
     VAConfigAttrib attrib;
@@ -241,8 +239,13 @@ Decode_Status
         return DECODE_FAIL;
     }
 
+    if (!m_allocator) {
+        //use internal allocator
+        m_allocator.reset(new VaapiSurfaceAllocator(m_display->getID()));
+    }
+
     m_configBuffer.surfaceNumber = numSurface;
-    m_surfacePool = VaapiDecSurfacePool::create(m_display, &m_configBuffer);
+    m_surfacePool = VaapiDecSurfacePool::create(m_display, &m_configBuffer, m_allocator);
     DEBUG("surface pool is created");
     if (!m_surfacePool)
         return DECODE_FAIL;
@@ -279,7 +282,6 @@ Decode_Status VaapiDecoderBase::terminateVA(void)
     m_surfacePool.reset();
     DEBUG("surface pool is reset");
     m_context.reset();
-    m_display.reset();
 
     m_VAStarted = false;
     return DECODE_SUCCESS;
@@ -291,6 +293,7 @@ void VaapiDecoderBase::setNativeDisplay(NativeDisplay * nativeDisplay)
         return;
 
     m_externalDisplay = *nativeDisplay;
+    m_display = VaapiDisplay::create(m_externalDisplay);
 }
 
 void VaapiDecoderBase::releaseLock(bool lockable)
@@ -299,6 +302,18 @@ void VaapiDecoderBase::releaseLock(bool lockable)
         return;
 
     m_surfacePool->setWaitable(lockable);
+}
+
+struct NullDeleter
+{
+    void operator()(SurfaceAllocator* allocator)
+    {
+    }
+};
+
+void VaapiDecoderBase::setAllocator(SurfaceAllocator* allocator)
+{
+    m_allocator.reset(allocator, NullDeleter());
 }
 
 SurfacePtr VaapiDecoderBase::createSurface()

@@ -64,6 +64,8 @@ class VaapiDecoderBase:public IVideoDecoder {
     void setNativeDisplay(NativeDisplay * nativeDisplay);
     void releaseLock(bool lockable=false);
 
+    void  setAllocator(SurfaceAllocator* allocator);
+
     //do not use this, we will remove this in near future
     virtual VADisplay getDisplayID();
   protected:
@@ -85,6 +87,7 @@ class VaapiDecoderBase:public IVideoDecoder {
      * empty surface, recycle used surface.
      */
     DecSurfacePoolPtr m_surfacePool;
+    SharedPtr<SurfaceAllocator> m_allocator;
 
     bool m_VAStarted;
 
