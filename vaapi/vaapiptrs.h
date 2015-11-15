@@ -52,8 +52,6 @@ typedef SharedPtr < VaapiContext > ContextPtr;
 class VaapiDecSurfacePool;
 typedef SharedPtr < VaapiDecSurfacePool > DecSurfacePoolPtr;
 
-class VaapiImagePool;
-typedef SharedPtr < VaapiImagePool > ImagePoolPtr;
 } //namespace YamiMediaCodec
 
 #endif                          /* vaapiptr_h */

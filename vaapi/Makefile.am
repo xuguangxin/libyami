@@ -8,7 +8,6 @@ libyami_vaapi_source_c = \
         vaapiutils.cpp \
         vaapidisplay.cpp \
         vaapicontext.cpp \
-        vaapiimagepool.cpp \
         vaapisurfaceallocator.cpp \
 	$(NULL)
 
@@ -21,7 +20,6 @@ libyami_vaapi_source_h_priv = \
         vaapitypes.h \
         vaapidisplay.h \
         vaapicontext.h \
-        vaapiimagepool.h \
         vaapisurfaceallocator.h \
 	$(NULL)
 
