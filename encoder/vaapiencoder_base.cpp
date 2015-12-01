@@ -286,9 +286,15 @@ SurfacePtr VaapiEncoderBase::createNewSurface(uint32_t fourcc)
 
 }
 
-SurfacePtr VaapiEncoderBase::createSurface(uint32_t fourcc)
+SurfacePtr VaapiEncoderBase::createSurface()
 {
-    return createNewSurface(fourcc);
+    SurfacePtr s;
+    if (m_pool) {
+        s = m_pool->alloc();
+    } else {
+        ERROR("BUG!: surface pool not created");
+    }
+    return s;
 }
 
 SurfacePtr VaapiEncoderBase::createSurface(VideoFrameRawData* frame)
@@ -409,6 +415,8 @@ VaapiProfile VaapiEncoderBase::profile() const
 
 void VaapiEncoderBase::cleanupVA()
 {
+    m_pool.reset();
+    m_alloc.reset();
     m_context.reset();
     m_display.reset();
 }
@@ -437,10 +445,21 @@ bool VaapiEncoderBase::initVA()
         return false;
     }
 
+    m_alloc.reset(new VaapiSurfaceAllocator(VaapiDisplay.getID(), 0));
+
+    int32_t width = m_videoParamCommon.resolution.width;
+    int32_t height = m_videoParamCommon.resolution.height;
+    m_pool = SurfacePool::create(m_alloc, YAMI_FOURCC_NV12, (uint32_t)width, (uint32_t)height,m_maxOutputBuffer);
+    if (!m_pool)
+        return false;
+
+    std::vector<SurfaceID> surfaces;
+    m_pool->peekSurfaces(surfaces);
+
     m_context = VaapiContext::create(config,
-                             m_videoParamCommon.resolution.width,
-                             m_videoParamCommon.resolution.height,
-                             VA_PROGRESSIVE, 0, 0);
+                             width,
+                             height,
+                             VA_PROGRESSIVE, &surfaces[0], surfaces.size());
     if (!m_context) {
         ERROR("failed to create context");
         return false;
