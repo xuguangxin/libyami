@@ -94,9 +94,9 @@ VaapiSurface::VaapiSurface(const DisplayPtr& display,
 
 }
 
-VaapiSurface::VaapiSurface(intptr_t id)
+VaapiSurface::VaapiSurface(intptr_t id, uint32_t width, uint32_t height)
     :m_chromaType(VAAPI_CHROMA_TYPE_YUV400)
-    , m_allocWidth(0), m_allocHeight(0), m_width(0), m_height(0)
+    , m_allocWidth(width), m_allocHeight(height), m_width(width), m_height(height)
     , m_ID((VASurfaceID)id), m_owner(false)
 {
 }
