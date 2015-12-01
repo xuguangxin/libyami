@@ -33,7 +33,9 @@
 #include "vaapicodedbuffer.h"
 #include "vaapi/vaapidisplay.h"
 #include "vaapi/vaapicontext.h"
+#include "vaapi/vaapisurfaceallocator.h"
 #include "vaapi/vaapiutils.h"
+
 
 const uint32_t MaxOutputBuffer=5;
 namespace YamiMediaCodec{
@@ -445,7 +447,7 @@ bool VaapiEncoderBase::initVA()
         return false;
     }
 
-    m_alloc.reset(new VaapiSurfaceAllocator(VaapiDisplay.getID(), 0));
+    m_alloc.reset(new VaapiSurfaceAllocator(m_display->getID(), 0));
 
     int32_t width = m_videoParamCommon.resolution.width;
     int32_t height = m_videoParamCommon.resolution.height;
@@ -453,7 +455,7 @@ bool VaapiEncoderBase::initVA()
     if (!m_pool)
         return false;
 
-    std::vector<SurfaceID> surfaces;
+    std::vector<VASurfaceID> surfaces;
     m_pool->peekSurfaces(surfaces);
 
     m_context = VaapiContext::create(config,

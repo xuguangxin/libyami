@@ -27,8 +27,14 @@
 #include "config.h"
 #endif
 
+#include "common/log.h"
 #include "common/videopool.h"
 #include "interface/VideoCommonDefs.h"
+/* we should not include vaapi surface here,
+ * but we have no choose before we make VaapiSurface more generic,
+ * and rename it to Surface
+ */
+#include "vaapi/vaapisurface.h"
 #include <vector>
 
 namespace YamiMediaCodec{
@@ -36,9 +42,9 @@ namespace YamiMediaCodec{
 class SurfacePool
 {
 public:
-    SharedPtr<SurfacePool>
+    static SharedPtr<SurfacePool>
     create(const SharedPtr<SurfaceAllocator>& alloc,
-           uint32_t fourcc, uint32_t width, uint32_height, uint32_t size);
+           uint32_t fourcc, uint32_t width, uint32_t height, uint32_t size);
 
     /**
      * allocator surface from pool, if no avaliable surface it will return NULL
@@ -49,12 +55,13 @@ public:
      * peek surfaces from surface pool.
      */
     template <class S>
-    void peekSurfaces(const std::vector<S>& surfaces);
+    void peekSurfaces(std::vector<S>& surfaces);
+    ~SurfacePool();
 private:
     SurfacePool();
-    ~SurfacePool();
+
     YamiStatus init(const SharedPtr<SurfaceAllocator>& alloc,
-           uint32_t fourcc, uint32_t width, uint32_height, uint32_t size);
+           uint32_t fourcc, uint32_t width, uint32_t height, uint32_t size);
 
     SharedPtr<SurfaceAllocator>         m_alloc;
     SurfaceAllocParams                  m_params;
@@ -64,12 +71,12 @@ private:
 };
 
 template <class S>
-void SurfacePool::peekSurfaces(const std::vector<S>& surfaces)
+void SurfacePool::peekSurfaces(std::vector<S>& surfaces)
 {
     ASSERT(surfaces.size() == 0);
     ASSERT(m_alloc);
     for (uint32_t i = 0; i < m_params.size; i++) {
-        surfaces.push((S)m_params.surfaces[i]);
+        surfaces.push_back((S)m_params.surfaces[i]);
     }
 }
 
