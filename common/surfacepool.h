@@ -27,8 +27,8 @@
 #include "config.h"
 #endif
 
-#include "common/VideoCommonDefs.h"
 #include "common/videopool.h"
+#include "interface/VideoCommonDefs.h"
 #include <vector>
 
 namespace YamiMediaCodec{
