@@ -23,8 +23,12 @@
 #ifndef surfacepool_h
 #define surfacepool_h
 
-#include <common/VideoCommonDefs.h>
-#include <common/videopool.h>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "common/VideoCommonDefs.h"
+#include "common/videopool.h"
 #include <vector>
 
 namespace YamiMediaCodec{
@@ -55,6 +59,7 @@ private:
     SharedPtr<SurfaceAllocator>         m_alloc;
     SurfaceAllocParams                  m_params;
     SharedPtr<VideoPool<VaapiSurface> > m_pool;
+    DISALLOW_COPY_AND_ASSIGN(SurfacePool)
 
 };
 

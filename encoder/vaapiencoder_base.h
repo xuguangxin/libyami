@@ -28,6 +28,7 @@
 #include "interface/VideoEncoderInterface.h"
 #include "common/lock.h"
 #include "common/log.h"
+#include "common/surfacepool.h"
 #include "vaapiencpicture.h"
 #include "vaapi/vaapibuffer.h"
 #include "vaapi/vaapiptrs.h"
