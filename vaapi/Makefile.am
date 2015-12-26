@@ -9,6 +9,7 @@ libyami_vaapi_source_c = \
 	vaapidisplay.cpp \
 	vaapicontext.cpp \
 	vaapiimagepool.cpp \
+	yamidisplay.cpp \
 	$(NULL)
 
 libyami_vaapi_source_h_priv = \
@@ -21,6 +22,10 @@ libyami_vaapi_source_h_priv = \
 	vaapidisplay.h \
 	vaapicontext.h \
 	vaapiimagepool.h \
+	$(NULL)
+
+libyami_vaapi_source_h = \
+	../interface/NativeDisplayHelper.h \
 	$(NULL)
 
 libyami_vaapi_ldflags = \
