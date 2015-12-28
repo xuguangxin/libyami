@@ -26,6 +26,7 @@
 #include "common/log.h"
 #include "common/utils.h"
 #include "VideoDecoderHost.h"
+#include "NativeDisplayHelper.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -103,9 +104,7 @@ public:
     SimplePlayer():m_window(0), m_width(0), m_height(0) {}
     ~SimplePlayer()
     {
-        if (m_nativeDisplay) {
-            vaTerminate(m_vaDisplay);
-        }
+        m_nativeDisplay.reset();
         if (m_window) {
             XDestroyWindow(m_display.get(), m_window);
         }
@@ -135,17 +134,17 @@ private:
             return false;
         }
         m_display.reset(display, XCloseDisplay);
-        m_vaDisplay = vaGetDisplay(m_display.get());
-        int major, minor;
-        VAStatus status;
-        status = vaInitialize(m_vaDisplay, &major, &minor);
-        if (status != VA_STATUS_SUCCESS) {
-            fprintf(stderr, "init va failed status = %d", status);
+
+        YamiDisplay yamiDisplay;
+        memset(&yamiDisplay, 0, sizeof(yamiDisplay));
+        yamiDisplay.type = YAMI_DISPLAY_X11;
+        yamiDisplay.handle = (intptr_t)display;
+        m_nativeDisplay.reset(createNativeDisplay(&yamiDisplay), releaseNativeDisplay);
+        if (!m_nativeDisplay) {
+            fprintf(stderr, "Failed to createNativeDisplay \n");
             return false;
         }
-        m_nativeDisplay.reset(new NativeDisplay);
-        m_nativeDisplay->type = NATIVE_DISPLAY_VA;
-        m_nativeDisplay->handle = (intptr_t)m_vaDisplay;
+        m_vaDisplay = (VADisplay)m_nativeDisplay->handle;
         return true;
     }
     void resizeWindow(int width, int height)
