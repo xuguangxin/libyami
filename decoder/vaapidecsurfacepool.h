@@ -31,6 +31,7 @@
 #include "vaapi/vaapitypes.h"
 #include "interface/VideoDecoderDefs.h"
 #include <deque>
+#include <list>
 #include <map>
 #include <vector>
 #include <va/va.h>
@@ -113,7 +114,7 @@ private:
     SurfaceMap m_surfaceMap;
 
     //free and allocted.
-    std::deque<VASurfaceID> m_freed;
+    std::list<VASurfaceID> m_freed;
     typedef std::map<VASurfaceID, uint32_t> Allocated;
     Allocated m_allocated;
 
