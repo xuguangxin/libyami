@@ -4,6 +4,7 @@ libyami_common_source_c = \
 	nalreader.cpp \
 	surfacepool.cpp \
 	YamiVersion.cpp \
+	Thread.cpp \
 	$(NULL)
 
 libyami_common_source_h = \
@@ -20,6 +21,7 @@ libyami_common_source_h_priv = \
 	nalreader.h \
 	videopool.h \
 	surfacepool.h \
+	Thread.h \
 	$(NULL)
 
 libyami_common_ldflags = \
