@@ -39,10 +39,10 @@
 
 namespace YamiMediaCodec{
 
-class SurfacePool
+class InternalSurfacePool
 {
 public:
-    static SharedPtr<SurfacePool>
+    static SharedPtr<InternalSurfacePool>
     create(const DisplayPtr& display, const SharedPtr<SurfaceAllocator>& alloc,
            uint32_t fourcc, uint32_t width, uint32_t height, uint32_t size);
 
@@ -56,9 +56,9 @@ public:
      */
     template <class S>
     void peekSurfaces(std::vector<S>& surfaces);
-    ~SurfacePool();
+    ~InternalSurfacePool();
 private:
-    SurfacePool();
+    InternalSurfacePool();
 
     YamiStatus init(const DisplayPtr& display, const SharedPtr<SurfaceAllocator>& alloc,
            uint32_t fourcc, uint32_t width, uint32_t height, uint32_t size);
@@ -66,12 +66,12 @@ private:
     SharedPtr<SurfaceAllocator>         m_alloc;
     SurfaceAllocParams                  m_params;
     SharedPtr<VideoPool<VaapiSurface> > m_pool;
-    DISALLOW_COPY_AND_ASSIGN(SurfacePool)
+    DISALLOW_COPY_AND_ASSIGN(InternalSurfacePool)
 
 };
 
 template <class S>
-void SurfacePool::peekSurfaces(std::vector<S>& surfaces)
+void InternalSurfacePool::peekSurfaces(std::vector<S>& surfaces)
 {
     ASSERT(surfaces.size() == 0);
     ASSERT(m_alloc);

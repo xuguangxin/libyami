@@ -180,7 +180,7 @@ private:
     void cleanupVA();
     NativeDisplay m_externalDisplay;
 
-    SharedPtr<SurfacePool> m_pool;
+    SharedPtr<InternalSurfacePool> m_pool;
     SharedPtr<SurfaceAllocator> m_alloc;
 
     Lock m_lock;

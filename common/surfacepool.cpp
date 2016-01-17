@@ -30,22 +30,22 @@
 
 namespace YamiMediaCodec{
 
-SharedPtr<SurfacePool>
-SurfacePool::create(const DisplayPtr& display, const SharedPtr<SurfaceAllocator>& alloc,
+SharedPtr<InternalSurfacePool>
+InternalSurfacePool::create(const DisplayPtr& display, const SharedPtr<SurfaceAllocator>& alloc,
            uint32_t fourcc, uint32_t width, uint32_t height, uint32_t size)
 {
-    SharedPtr<SurfacePool> pool(new SurfacePool);
+    SharedPtr<InternalSurfacePool> pool(new InternalSurfacePool);
     if (YAMI_SUCCESS != pool->init(display, alloc, fourcc, width, height, size))
         pool.reset();
     return pool;
 }
 
-SurfacePool::SurfacePool()
+InternalSurfacePool::InternalSurfacePool()
 {
     memset(&m_params, 0, sizeof(m_params));
 }
 
-YamiStatus SurfacePool::init(const DisplayPtr& display, const SharedPtr<SurfaceAllocator>& alloc,
+YamiStatus InternalSurfacePool::init(const DisplayPtr& display, const SharedPtr<SurfaceAllocator>& alloc,
            uint32_t fourcc, uint32_t width, uint32_t height, uint32_t size)
 {
     m_params.fourcc = fourcc;
@@ -72,14 +72,14 @@ YamiStatus SurfacePool::init(const DisplayPtr& display, const SharedPtr<SurfaceA
     return YAMI_SUCCESS;
 }
 
-SurfacePool::~SurfacePool()
+InternalSurfacePool::~InternalSurfacePool()
 {
     if (m_alloc) {
         m_alloc->free(m_alloc.get(), &m_params);
     }
 }
 
-SurfacePtr SurfacePool::alloc()
+SurfacePtr InternalSurfacePool::alloc()
 {
     return m_pool->alloc();
 }
