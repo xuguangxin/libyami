@@ -135,6 +135,22 @@ typedef enum {
     YAMI_DRIVER_FAIL,
 } YamiStatus;
 
+typedef struct _SurfacePool SurfacePool;
+// yami will call this interface to get surface for decode.
+// the surface maybe use for reference or decode only
+// it will call recycle after
+// 1. it not used as refercne
+// 2. it not used in display (noone hold refer for SharedPtr<VideoFrame> after getOuput
+struct _SurfacePool
+{
+    // private data for surface pool, yami will never touch it
+    void* user;
+    // yami will call this after it need surface for decode
+    YamiStatus (*alloc)(SurfacePool* thiz, intptr_t* surface);
+    // yami will call this if on one refer the allocated surface
+    YamiStatus (*recycle)(SurfacePool* thiz, intptr_t surface);
+};
+
 typedef struct {
     //in
     uint32_t fourcc;
@@ -151,6 +167,9 @@ typedef struct {
 
     //out
     intptr_t* surfaces;
+    //out, optional, if you do not set this, yami will use a fifo for surface pool
+    //you can use this to contorl which surface use for next decode frame
+    SurfacePool* pool;
 } SurfaceAllocParams;
 
 typedef struct _SurfaceAllocator SurfaceAllocator;
