@@ -29,6 +29,7 @@
 #include "vaapi/vaapidisplay.h"
 #include "vaapi/vaapisurface.h"
 #include "vaapi/vaapiimagepool.h"
+#include <algorithm>
 #include <string.h>
 #include <assert.h>
 
@@ -44,6 +45,13 @@ DecSurfacePoolPtr VaapiDecSurfacePool::create(const DisplayPtr& display, VideoCo
     return pool;
 }
 
+struct NullDeleter
+{
+    void operator()(void const *) const
+    {
+    }
+};
+
 bool VaapiDecSurfacePool::init(const DisplayPtr& display, VideoConfigBuffer* config,
     const SharedPtr<SurfaceAllocator>& allocator)
 {
@@ -58,6 +66,23 @@ bool VaapiDecSurfacePool::init(const DisplayPtr& display, VideoConfigBuffer* con
             m_allocParams.width, m_allocParams.height , m_allocParams.size);
         return false;
     }
+    if (m_allocParams.pool) {
+        SurfacePool* pool = m_allocParams.pool;
+        if (!pool->alloc || !pool->recycle) {
+            ERROR("you set the pool but did not set alloc and recycle function");
+            return false;
+        }
+        m_pool.reset(m_allocParams.pool, NullDeleter());
+    } else {
+        m_pool.reset(
+            createSurfacePoolFifo(m_allocParams.surfaces,m_allocParams.size),
+            releaseSurfacePoolFifo);
+        if (!m_pool) {
+            ERROR("failed to create surface pool");
+            return false;
+        }
+    }
+
     uint32_t size = m_allocParams.size;
     uint32_t width = m_allocParams.width;
     uint32_t height = m_allocParams.height;
@@ -126,9 +151,21 @@ SurfacePtr VaapiDecSurfacePool::acquireWithWait()
         return surface;
     }
 
-    assert(!m_freed.empty());
-    VASurfaceID id = m_freed.front();
-    m_freed.pop_front();
+    //add code here for temporary solution, we will remove entire VaapiDecSurfacePool
+    //after all call to VideoRawFrame deleted
+    intptr_t p;
+    YamiStatus status = m_pool->alloc(m_pool.get(), &p);
+    if (status != YAMI_SUCCESS) {
+        ERROR("allocate surface return %d", status);
+        return surface;
+    }
+    VASurfaceID id = (VASurfaceID)p;
+    std::list<VASurfaceID>::iterator it = std::find(m_freed.begin(), m_freed.end(), id);
+    if (it == m_freed.end()) {
+        ERROR("id %x is not freed surface id", id);
+        return surface;
+    }
+    m_freed.erase(it);
     m_allocated[id] = SURFACE_DECODING;
     VaapiSurface* s = m_surfaceMap[id];
     surface.reset(s, SurfaceRecycler(shared_from_this()));
@@ -349,6 +386,7 @@ void VaapiDecSurfacePool::recycleLocked(VASurfaceID id, SurfaceState flag)
     if (it->second == SURFACE_FREE) {
         m_allocated.erase(it);
         m_freed.push_back(id);
+        m_pool->recycle(m_pool.get(), (intptr_t)id);
         if (m_flushing && m_allocated.size() == 0)
             m_flushing = false;
         m_cond.signal();

@@ -27,10 +27,12 @@
 #include "common/condition.h"
 #include "common/common_def.h"
 #include "common/lock.h"
+#include "common/surfacepoolfifo.h"
 #include "vaapi/vaapiptrs.h"
 #include "vaapi/vaapitypes.h"
 #include "interface/VideoDecoderDefs.h"
 #include <deque>
+#include <list>
 #include <map>
 #include <vector>
 #include <va/va.h>
@@ -113,7 +115,7 @@ private:
     SurfaceMap m_surfaceMap;
 
     //free and allocted.
-    std::deque<VASurfaceID> m_freed;
+    std::list<VASurfaceID> m_freed;
     typedef std::map<VASurfaceID, uint32_t> Allocated;
     Allocated m_allocated;
 
@@ -128,6 +130,8 @@ private:
     //for external allocator
     SharedPtr<SurfaceAllocator> m_allocator;
     SurfaceAllocParams m_allocParams;
+    //surface pool to contorl wich surface to be use for next frame
+    SharedPtr<SurfacePool> m_pool;
 
     struct SurfaceRecycler;
     struct SurfaceRecyclerRender;
