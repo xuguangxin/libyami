@@ -23,10 +23,6 @@
 #ifndef internalsurfacepool_h
 #define internalsurfacepool_h
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include "common/log.h"
 #include "common/videopool.h"
 #include "interface/VideoCommonDefs.h"
