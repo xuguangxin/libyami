@@ -1,5 +1,5 @@
 /*
- *  surfacepool.h - surface pool, create surfaces from allocator and pool it
+ *  internalsurfacepool.h - surface pool, create surfaces from allocator and pool it
  *
  *  Copyright (C) 2015 Intel Corporation
  *    Author: XuGuangxin<Guangxin.Xu@intel.com>
@@ -20,8 +20,8 @@
  *  Boston, MA 02110-1301 USA
  */
 
-#ifndef surfacepool_h
-#define surfacepool_h
+#ifndef internalsurfacepool_h
+#define internalsurfacepool_h
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -82,4 +82,4 @@ void InternalSurfacePool::peekSurfaces(std::vector<S>& surfaces)
 
 } //YamiMediaCodec
 
-#endif //#define surfacepool_h
+#endif //#define internalsurfacepool_h

@@ -1,5 +1,5 @@
 /*
- *  surfacepool.cpp - surface pool, create surfaces from allocator and pool it
+ *  internalsurfacepool.cpp - surface pool, create surfaces from allocator and pool it
  *
  *  Copyright (C) 2015 Intel Corporation
  *    Author: XuGuangxin<Guangxin.Xu@intel.com>
@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#include "surfacepool.h"
+#include "internalsurfacepool.h"
 
 #include "common/log.h"
 
