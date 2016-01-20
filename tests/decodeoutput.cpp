@@ -3,8 +3,9 @@
  *
  *  Copyright (C) 2011-2014 Intel Corporation
  *    Author: Halley Zhao<halley.zhao@intel.com>
- *    Author: Xu Guangxin <guangxin.xu@intel.com>
- *    Author: Liu Yangbin <yangbinx.liu@intel.com>
+ *            Xu Guangxin<guangxin.xu@intel.com>
+ *            Liu Yangbin<yangbinx.liu@intel.com>
+ *            Lin Hai<hai1.lin@intel.com>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public License
@@ -29,364 +30,471 @@
 #include "decodeoutput.h"
 #include "common/log.h"
 #include "common/utils.h"
-#include <sys/stat.h>
-#include <assert.h>
-#include <va/va.h>
+#include "vaapi/vaapiutils.h"
+
+#if __ENABLE_MD5__
+#include <openssl/md5.h>
+#endif
+
 #ifdef __ENABLE_X11__
 #include <X11/Xlib.h>
+#include <va/va_x11.h>
 #endif
 
 #ifdef __ENABLE_TESTS_GLES__
 #include "./egl/gles2_help.h"
 #include "egl/egl_util.h"
+#include "egl/egl_vaapi_image.h"
 #endif
 
-bool DecodeOutput::setVideoSize(int width, int height)
+#include <va/va.h>
+#include <va/va_drmcommon.h>
+#include <sys/stat.h>
+#include <sstream>
+#include <stdio.h>
+#include <assert.h>
+
+using YamiMediaCodec::checkVaapiStatus;
+
+bool DecodeOutput::init()
 {
-    m_width = width;
+    m_nativeDisplay.reset(new NativeDisplay);
+    m_nativeDisplay->type = NATIVE_DISPLAY_VA;
+    m_nativeDisplay->handle = (intptr_t)*m_vaDisplay;
+    if (!m_vaDisplay || !m_nativeDisplay) {
+        ERROR("init display error");
+        return false;
+    }
+    return true;
+}
+
+SharedPtr<NativeDisplay> DecodeOutput::nativeDisplay()
+{
+    return m_nativeDisplay;
+}
+
+bool DecodeOutput::setVideoSize(uint32_t with, uint32_t height)
+{
+    m_width = with;
     m_height = height;
     return true;
 }
 
-DecodeOutput::DecodeOutput(IVideoDecoder* decoder)
-    :m_decoder(decoder), m_width(0), m_height(0), m_renderFrames(0)
+class DecodeOutputNull : public DecodeOutput {
+public:
+    DecodeOutputNull() {}
+    ~DecodeOutputNull() {}
+    bool init();
+    bool output(SharedPtr<VideoFrame>& frame);
+};
+
+bool DecodeOutputNull::init()
 {
-    memset(&m_frame, 0, sizeof(m_frame));
-    m_frame.memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
+    m_vaDisplay = createVADisplay();
+    if (!m_vaDisplay)
+        return false;
+    return DecodeOutput::init();
 }
 
-Decode_Status DecodeOutput::processOneFrame(bool drain)
+bool DecodeOutputNull::output(SharedPtr<VideoFrame>& frame)
 {
-    Decode_Status status = renderOneFrame(drain);
-
-    if (status == RENDER_SUCCESS) {
-        m_renderFrames++;
-        m_decoder->renderDone(&m_frame);
-    }
-
-    return status;
+    VAStatus status = vaSyncSurface(*m_vaDisplay, (VASurfaceID)frame->surface);
+    return checkVaapiStatus(status, "vaSyncSurface");
 }
 
-Decode_Status DecodeOutputNull::renderOneFrame(bool drain)
-{
-    m_frame.memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
-    m_frame.width = 0;
-    m_frame.height = 0;
-    m_frame.fourcc = 0;
+class ColorConvert {
+public:
+    ColorConvert(const SharedPtr<VADisplay>& display, uint32_t fourcc)
+        : m_width(0)
+        , m_height(0)
+        , m_destFourcc(fourcc)
+        , m_display(display)
 
-    Decode_Status status = m_decoder->getOutput(&m_frame, drain);
-    if (status == RENDER_SUCCESS)
-        vaSyncSurface((void*)(m_frame.handle), m_frame.internalID);
-    return status;
-}
-
-struct ColorConvert
-{
-    ColorConvert(uint32_t destFourcc)
-        :m_destFourcc(destFourcc) {}
-    VideoFrameRawData* convert(VideoFrameRawData* frame)
     {
-        if (frame->fourcc == m_destFourcc) {
-            //pass through
+        m_allocator.reset(new PooledFrameAllocator(m_display, 3));
+    }
+    SharedPtr<VideoFrame> convert(const SharedPtr<VideoFrame>& frame)
+    {
+        if (frame->fourcc == m_destFourcc)
             return frame;
+        SharedPtr<VideoFrame> dstFrame;
+        if (frame->fourcc != VA_FOURCC_NV12) {
+            fprintf(stderr, "cannot convert fourcc(%u) to fourcc(%u)\n", frame->fourcc, m_destFourcc);
+            return dstFrame;
         }
-        assert(m_destFourcc == VA_FOURCC_I420 && frame->fourcc == VA_FOURCC_NV12);
+        VAImage srcImage, dstImage;
+        char *srcBuf, *destBuf;
 
-        uint32_t width[3];
-        uint32_t height[3];
-        uint32_t planes;
-        if (!getPlaneResolution(frame->fourcc, frame->width, frame->height, width, height, planes))
-            return NULL;
-        return NV12ToI420(frame, width, height);
+        srcBuf = map(frame->surface, srcImage);
+        if (!srcBuf)
+            return dstFrame;
+
+        if (!initAllocator(srcImage.width, srcImage.height)) {
+            unmap(srcImage);
+            return dstFrame;
+        }
+        dstFrame = m_allocator->alloc();
+        memcpy(&dstFrame->crop, &frame->crop, sizeof(frame->crop));
+        dstFrame->fourcc = m_destFourcc;
+
+        destBuf = map(dstFrame->surface, dstImage);
+        if (!destBuf) {
+            unmap(srcImage);
+            dstFrame.reset();
+            return dstFrame;
+        }
+        copy(frame->crop.width, frame->crop.height, srcBuf, srcImage, destBuf, dstImage);
+
+        unmap(srcImage);
+        unmap(dstImage);
+        return dstFrame;
     }
 
 private:
-    VideoFrameRawData* NV12ToI420(VideoFrameRawData* frame, uint32_t width[3], uint32_t height[3])
+    char* map(intptr_t surface, VAImage& image)
     {
-        m_data.clear();
-        memset(&m_converted, 0, sizeof(m_converted));
-        m_converted.memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-        m_converted.fourcc = m_destFourcc;
-        m_converted.width = frame->width;
-        m_converted.height = frame->height;
-        uint8_t* data = reinterpret_cast<uint8_t*>(frame->handle);
-        copyY(m_data, data, frame->offset[0], width[0], height[0], frame->pitch[0]);
-        m_converted.pitch[0] = width[0];
-        for (int i = 1; i < 3; i++) {
-            m_converted.offset[i] = m_data.size();
-            m_converted.pitch[i] = width[1]>>1;
-            copyUV(m_data, data, frame->offset[1] + (i - 1), width[1], height[1], frame->pitch[1]);
+        char* p = NULL;
+        VAStatus status = vaDeriveImage(*m_display, (VASurfaceID)surface, &image);
+        if (!checkVaapiStatus(status, "vaDeriveImage"))
+            return NULL;
+        status = vaMapBuffer(*m_display, image.buf, (void**)&p);
+        if (!checkVaapiStatus(status, "vaMapBuffer")) {
+            checkVaapiStatus(vaDestroyImage(*m_display, image.image_id), "vaDestroyImage");
+            return NULL;
         }
-        m_converted.handle = reinterpret_cast<intptr_t>(&m_data[0]);
-        return &m_converted;
+        return p;
     }
-    static void copyY(std::vector<uint8_t>& v, uint8_t* data, uint32_t offset, uint32_t width,
-        uint32_t height, uint32_t pitch)
+    void unmap(const VAImage& image)
     {
-        data += offset;
-        for (uint32_t h = 0; h < height; h++) {
-            v.insert(v.end(), data, data + width);
-            data += pitch;
+        checkVaapiStatus(vaUnmapBuffer(*m_display, image.buf), "vaUnmapBuffer");
+        checkVaapiStatus(vaDestroyImage(*m_display, image.image_id), "vaDestroyImage");
+    }
+
+    //support i420,yv12
+    void copy(uint32_t width, uint32_t height, char* src, VAImage& srcImage, char* dst, VAImage& dstImage)
+    {
+        //android libva only support yv12. we set dstImage as yv12
+        //and use m_destFourcc for real dest format.
+        ASSERT(srcImage.format.fourcc == VA_FOURCC_NV12 && dstImage.format.fourcc == VA_FOURCC_YV12);
+        uint32_t planes, byteWidth[3], byteHeight[3];
+        if (!getPlaneResolution(srcImage.format.fourcc, width, height, byteWidth, byteHeight, planes)) {
+            ERROR("get plane reoslution failed");
+            return;
+        }
+        uint32_t row, col, index;
+        char *y_src, *u_src;
+        char *y_dst, *u_dst, *v_dst;
+        y_src = src + srcImage.offsets[0];
+        u_src = src + srcImage.offsets[1];
+
+        //copy y
+        y_dst = dst + dstImage.offsets[0];
+        for (row = 0; row < byteHeight[0]; ++row) {
+            memcpy(y_dst, y_src, byteWidth[0]);
+            y_dst += dstImage.pitches[0];
+            y_src += srcImage.pitches[0];
         }
 
-    }
-    static void copyUV(std::vector<uint8_t>& v, uint8_t* data, uint32_t offset, uint32_t width,
-        uint32_t height, uint32_t pitch)
-    {
-        data += offset;
-        for (uint32_t h = 0; h < height; h++) {
-            uint8_t* start = data;
-            uint8_t* end = data + width;
-            while (start < end) {
-                v.push_back(*start);
-                start += 2 ;
+        //copy uv
+        int u, v;
+        u = (m_destFourcc == VA_FOURCC_YV12) ? 2 : 1;
+        v = (m_destFourcc == VA_FOURCC_YV12) ? 1 : 2;
+        u_dst = dst + dstImage.offsets[u];
+        v_dst = dst + dstImage.offsets[v];
+        for (row = 0; row < byteHeight[1]; ++row) {
+            col = 0, index = 0;
+            while (index < byteWidth[1]) {
+                u_dst[col] = u_src[index];
+                v_dst[col] = u_src[index + 1];
+                index += 2;
+                col++;
             }
-            data += pitch;
+            u_src += srcImage.pitches[1];
+            u_dst += dstImage.pitches[u];
+            v_dst += dstImage.pitches[v];
         }
-
     }
 
+    bool initAllocator(uint32_t width, uint32_t height)
+    {
+        if (width > m_width || height > m_height) {
+            m_width = width > m_width ? width : m_width;
+            m_height = height > m_height ? height : m_height;
+            //android driver not supported VA_FOURCC_I420, so use VA_FOURCC_YV12
+            //to replace VA_FOURCC_I420. But m_destFourcc keep the true fourcc
+            if (!m_allocator->setFormat(VA_FOURCC_YV12, m_width, m_height)) {
+                m_allocator.reset();
+                fprintf(stderr, "m_allocator setFormat failed\n");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    uint32_t m_width;
+    uint32_t m_height;
     uint32_t m_destFourcc;
-    VideoFrameRawData m_converted;
-    std::vector<uint8_t> m_data;
+    SharedPtr<VADisplay> m_display;
+    SharedPtr<FrameAllocator> m_allocator;
 };
 
-Decode_Status DecodeOutputRaw::renderOneFrame(bool drain)
-{
-    m_frame.memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-    m_frame.width = 0;
-    m_frame.height = 0;
-    m_frame.fourcc = m_srcFourcc;
-
-    Decode_Status status = m_decoder->getOutput(&m_frame, drain);
-    if (status != RENDER_SUCCESS)
-        return status;
-    assert(m_convert && "need set dest fourcc first");
-    VideoFrameRawData* converted = m_convert->convert(&m_frame);
-    if (!converted || !render(converted)) {
-        status = RENDER_FAIL;
+class DecodeOutputFile : public DecodeOutput {
+public:
+    DecodeOutputFile(const char* outputFile, const char* inputFile, uint32_t fourcc)
+        : m_destFourcc(fourcc)
+        , m_inputFile(inputFile)
+        , m_outputFile(outputFile)
+    {
     }
-    return status;
-}
+    DecodeOutputFile() {}
+    virtual bool init();
+    virtual bool output(SharedPtr<VideoFrame>& frame);
 
-void DecodeOutputRaw::setFourcc(uint32_t fourcc)
+protected:
+    virtual bool writeFrame(SharedPtr<VideoFrame>& frame) = 0;
+    uint32_t m_destFourcc;
+    const char* m_inputFile;
+    const char* m_outputFile;
+
+private:
+    SharedPtr<ColorConvert> m_convert;
+};
+
+bool DecodeOutputFile::init()
 {
-    delete m_convert;
-    m_destFourcc = fourcc;
-    if (m_destFourcc == VA_FOURCC_I420 && m_enableSoftI420Convert) {
-        m_srcFourcc = VA_FOURCC_NV12;
-    } else {
-        m_srcFourcc = m_destFourcc;
+    m_vaDisplay = createVADisplay();
+    if (!m_vaDisplay)
+        return false;
+    if (m_destFourcc != VA_FOURCC_NV12) {
+        if (m_destFourcc != VA_FOURCC_YV12 && m_destFourcc != VA_FOURCC_I420) {
+            fprintf(stderr, "Output Fourcc isn't supported\n");
+            return false;
+        }
+        m_convert.reset(new ColorConvert(m_vaDisplay, m_destFourcc));
     }
-    m_convert = new ColorConvert(m_destFourcc);
+    return DecodeOutput::init();
 }
 
-uint32_t DecodeOutputRaw::getFourcc()
+bool DecodeOutputFile::output(SharedPtr<VideoFrame>& frame)
 {
-    return m_destFourcc;
+    if (!setVideoSize(frame->crop.width, frame->crop.height))
+        return false;
+
+    if (m_convert)
+        frame = m_convert->convert(frame);
+    return writeFrame(frame);
 }
 
-DecodeOutputRaw::DecodeOutputRaw(IVideoDecoder* decoder)
-    :DecodeOutput(decoder), m_convert(NULL),
-    m_srcFourcc(0), m_destFourcc(0),
-    m_enableSoftI420Convert(true)
-{
-}
+class DecodeOutputDump : public DecodeOutputFile {
+public:
+    DecodeOutputDump(const char* outputFile, const char* inputFile, uint32_t fourcc)
+        : DecodeOutputFile(outputFile, inputFile, fourcc)
+    {
+    }
 
-DecodeOutputRaw::~DecodeOutputRaw()
-{
-    delete m_convert;
-}
+protected:
+    bool setVideoSize(uint32_t width, uint32_t height);
+    virtual bool writeFrame(SharedPtr<VideoFrame>& frame);
 
-bool DecodeOutputFileDump::config(const char* source, const char* dest, uint32_t fourcc)
+private:
+    std::string getOutputFileName(uint32_t, uint32_t);
+    SharedPtr<VppOutput> m_output;
+};
+
+std::string DecodeOutputDump::getOutputFileName(uint32_t width, uint32_t height)
 {
-    if (!fourcc && dest)
-        fourcc = guessFourcc(dest);
-    setFourcc(fourcc);
-    const char* baseFileName = source;
-    const char* s = strrchr(source, '/');
-    if (s)
-        baseFileName = s + 1;
-    assert(dest);
+    std::ostringstream name;
     struct stat buf;
-    int r = stat(dest, &buf);
+    int r = stat(m_outputFile, &buf);
     if (r == 0 && buf.st_mode & S_IFDIR) {
-        m_name<<dest<<"/"<<baseFileName;
-        m_appendSize = true;
+        const char* baseFileName = m_inputFile;
+        const char* s = strrchr(m_inputFile, '/');
+        if (s)
+            baseFileName = s + 1;
+        name << m_outputFile << "/" << baseFileName;
+        char* ch = reinterpret_cast<char*>(&m_destFourcc);
+        name << "_" << width << 'x' << height << "." << ch[0] << ch[1] << ch[2] << ch[3];
     } else {
-        m_name<<dest;
-        m_appendSize = false;
+        name << m_outputFile;
     }
-    return true;
+    return name.str();
 }
 
-bool DecodeOutputFileDump::setVideoSize(int width, int height)
+bool DecodeOutputDump::setVideoSize(uint32_t width, uint32_t height)
 {
-    if (!m_fp) {
-        if (m_appendSize) {
-            uint32_t fourcc = getFourcc();
-            char* ch = reinterpret_cast<char*>(&fourcc);
-            m_name<<"_"<<width<<'x'<<height<<"."<<ch[0]<<ch[1]<<ch[2]<<ch[3];
+    if (!m_output) {
+        std::string name = getOutputFileName(width, height);
+        m_output = VppOutput::create(name.c_str(), m_destFourcc, m_width, m_height);
+        SharedPtr<VppOutputFile> outputFile = std::tr1::dynamic_pointer_cast<VppOutputFile>(m_output);
+        if (!outputFile) {
+            ERROR("maybe you set a wrong extension");
+            return false;
         }
-        std::string name = m_name.str();
-        m_fp = fopen(name.c_str(), "wb");
-    }
-    if (!DecodeOutputRaw::setVideoSize(width, height))
-        return false;
-    return m_fp;
-}
-
-bool DecodeOutputFileDump::render(VideoFrameRawData* frame)
-{
-    uint32_t width[3];
-    uint32_t height[3];
-    uint32_t planes;
-    if (!m_fp)
-        return false;
-
-    //ASSERT(m_width == frame->width && m_height == frame->height);
-    if (!getPlaneResolution(frame->fourcc, frame->width, frame->height, width, height, planes))
-        return false;
-    for (uint32_t i = 0; i < planes; i++) {
-        uint8_t* data = reinterpret_cast<uint8_t*>(frame->handle);
-        data += frame->offset[i];
-        for (uint32_t h = 0; h < height[i]; h++) {
-            fwrite(data, 1, width[i], m_fp);
-            data += frame->pitch[i];
+        SharedPtr<FrameWriter> writer(new VaapiFrameWriter(m_vaDisplay));
+        if (!outputFile->config(writer)) {
+            ERROR("config writer failed");
+            return false;
         }
     }
-    return true;
+    return DecodeOutputFile::setVideoSize(width, height);
 }
 
-DecodeOutputFileDump::DecodeOutputFileDump(IVideoDecoder* decoder)
-    :DecodeOutputRaw(decoder), m_fp(NULL), m_appendSize(false)
+bool DecodeOutputDump::writeFrame(SharedPtr<VideoFrame>& frame)
 {
-
+    return m_output->output(frame);
 }
 
-DecodeOutputFileDump::~DecodeOutputFileDump()
-{
-    if (m_fp)
-        fclose(m_fp);
-}
+#if __ENABLE_MD5__
+class DecodeOutputMD5 : public DecodeOutputFile {
+public:
+    DecodeOutputMD5(const char* outputFile, const char* inputFile, uint32_t fourcc)
+        : DecodeOutputFile(outputFile, inputFile, fourcc)
+    {
+    }
+    virtual ~DecodeOutputMD5();
 
-#if  __ENABLE_MD5__
-DecodeOutputExtractMD5::DecodeOutputExtractMD5(IVideoDecoder* decoder)
-    :DecodeOutputRaw(decoder)
-{
-    MD5_Init(&m_md5Ctx);
-}
+protected:
+    bool setVideoSize(uint32_t width, uint32_t height);
+    virtual bool writeFrame(SharedPtr<VideoFrame>& frame);
 
-bool DecodeOutputExtractMD5::config(const char* source, const char* dest, uint32_t fourcc)
-{
-    std::ostringstream md5File;
+private:
+    std::string getOutputFileName(uint32_t width, uint32_t height);
+    std::string writeToFile(MD5_CTX&);
+    static bool calcMD5(char* ptr, int size, FILE* fp);
 
-    if (!fourcc && dest)
-        fourcc = guessFourcc(dest);
-    setFourcc(fourcc);
-    const char* baseFileName = source;
-    const char* s = strrchr(source, '/');
-    if (s)
-        baseFileName = s + 1;
-    assert(dest);
+    FILE* m_file;
+    static MD5_CTX m_fileMD5;
+    static MD5_CTX m_frameMD5;
+    SharedPtr<VaapiFrameIO> m_frameIO;
+};
+
+MD5_CTX DecodeOutputMD5::m_frameMD5 = { 0 };
+MD5_CTX DecodeOutputMD5::m_fileMD5 = { 0 };
+
+std::string DecodeOutputMD5::getOutputFileName(uint32_t width, uint32_t height)
+{
+    std::ostringstream name;
+
+    name << m_outputFile;
     struct stat buf;
-    int r = stat(dest, &buf);
-    if (r == 0 && buf.st_mode & S_IFDIR)
-        md5File<<dest<<"/"<<baseFileName;
-    else
-        md5File<<dest;
-
-    md5File<<"."<<"md5";
-    m_fp = fopen(md5File.str().c_str(), "wb");
-    if(m_fp == NULL) {
-        fprintf(stderr, "Open or create file for receiving md5 error\n");
-        return false;
+    int r = stat(m_outputFile, &buf);
+    if (r == 0 && buf.st_mode & S_IFDIR) {
+        const char* fileName = m_inputFile;
+        const char* s = strrchr(m_inputFile, '/');
+        if (s)
+            fileName = s + 1;
+        name << "/" << fileName << ".md5";
     }
-
-    return true;
+    return name.str();
 }
-
-bool DecodeOutputExtractMD5::render(VideoFrameRawData* frame)
+bool DecodeOutputMD5::setVideoSize(uint32_t width, uint32_t height)
 {
-    MD5_CTX t_ctx = {0};
-
-    uint32_t width[3];
-    uint32_t height[3];
-    uint32_t planes;
-
-    //ASSERT(m_width == frame->width && m_height == frame->height);
-    if (!getPlaneResolution(frame->fourcc, frame->width, frame->height, width, height, planes))
-        return false;
-
-    MD5_Init(&t_ctx);
-
-    for (uint32_t i = 0; i < planes; i++) {
-        uint8_t* data = reinterpret_cast<uint8_t*>(frame->handle);
-        data += frame->offset[i];
-        for (uint32_t h = 0; h < height[i]; h++) {
-            MD5_Update(&t_ctx, data, width[i]);
-            MD5_Update(&m_md5Ctx, data, width[i]);
-            data += frame->pitch[i];
+    if (!m_file) {
+        std::string name = getOutputFileName(width, height);
+        m_file = fopen(name.c_str(), "wb");
+        if (!m_file) {
+            //ERROR("fail to open input file: %s", name.c_str());
+            return false;
         }
+        MD5_Init(&m_fileMD5);
+        m_frameIO.reset(new VaapiFrameIO(m_vaDisplay, calcMD5));
+        return true;
     }
-
-    extractMd5ToHexStr(t_ctx);
-
-    return true;
+    return DecodeOutputFile::setVideoSize(width, height);
 }
 
-std::string DecodeOutputExtractMD5::extractMd5ToHexStr(MD5_CTX& ctx)
+std::string DecodeOutputMD5::writeToFile(MD5_CTX& t_ctx)
 {
+    char temp[4];
+    uint8_t result[16] = { 0 };
     std::string strMD5;
-    char szTemp[4];
-    uint8_t result[16] = {0};
-
-    MD5_Final(result, &ctx);
+    MD5_Final(result, &t_ctx);
     for(uint32_t i = 0; i < 16; i++) {
-        memset(szTemp, 0, sizeof(szTemp));
-        snprintf(szTemp, sizeof(szTemp), "%02x", (uint32_t)result[i]);
-        strMD5 += szTemp;
+        memset(temp, 0, sizeof(temp));
+        snprintf(temp, sizeof(temp), "%02x", (uint32_t)result[i]);
+        strMD5 += temp;
     }
-
-    fprintf(m_fp, "%s\n", strMD5.c_str());
-
+    if (m_file)
+        fprintf(m_file, "%s\n", strMD5.c_str());
     return strMD5;
 }
 
-DecodeOutputExtractMD5::~DecodeOutputExtractMD5()
+bool DecodeOutputMD5::writeFrame(SharedPtr<VideoFrame>& frame)
 {
-    fprintf(m_fp, "The whole frames MD5 ");
-    fprintf(stderr, "The whole frames MD5 ");
-
-    fprintf(stderr, "%s\n", extractMd5ToHexStr(m_md5Ctx).c_str());
-
-    if(m_fp)
-        fclose(m_fp);
+    MD5_Init(&m_frameMD5);
+    m_frameIO->doIO(m_file, frame);
+    writeToFile(m_frameMD5);
+    return true;
 }
-#endif
+
+bool DecodeOutputMD5::calcMD5(char* ptr, int size, FILE* fp)
+{
+    MD5_Update(&m_frameMD5, ptr, size);
+    MD5_Update(&m_fileMD5, ptr, size);
+    return true;
+}
+
+DecodeOutputMD5::~DecodeOutputMD5()
+{
+    if (m_file) {
+        fprintf(m_file, "The whole frames MD5 ");
+        std::string fileMd5 = writeToFile(m_fileMD5);
+        fprintf(stderr, "The whole frames MD5:\n%s\n", fileMd5.c_str());
+        fclose(m_file);
+    }
+}
+#endif //__ENABLE_MD5__
 
 #ifdef __ENABLE_X11__
 class DecodeOutputX11 : public DecodeOutput
 {
 public:
-    virtual bool setVideoSize(int width, int height);
-    DecodeOutputX11(IVideoDecoder* decoder);
+    DecodeOutputX11();
     virtual ~DecodeOutputX11();
     bool init();
 protected:
+    virtual bool setVideoSize(uint32_t width, uint32_t height);
+    SharedPtr<VADisplay> createX11Display();
+
     Display* m_display;
     Window   m_window;
 };
 
-class DecodeOutputXWindow : public DecodeOutputX11
-{
+class DecodeOutputXWindow : public DecodeOutputX11 {
 public:
-    virtual Decode_Status renderOneFrame(bool drain);
-    DecodeOutputXWindow(IVideoDecoder* decoder);
+    DecodeOutputXWindow() {}
+    virtual ~DecodeOutputXWindow() {}
+    bool output(SharedPtr<VideoFrame>& frame);
 };
 
+SharedPtr<VADisplay> DecodeOutputX11::createX11Display()
+{
+    SharedPtr<VADisplay> display;
 
-bool DecodeOutputX11::setVideoSize(int width, int height)
+    m_display = XOpenDisplay(NULL);
+    if (!m_display) {
+        ERROR("Failed to XOpenDisplay for DecodeOutputX11");
+        return display;
+    }
+
+    VADisplay m_vaDisplay = vaGetDisplay(m_display);
+    int major, minor;
+    VAStatus status = vaInitialize(m_vaDisplay, &major, &minor);
+    if (!checkVaapiStatus(status, "vaInitialize"))
+        return display;
+    display.reset(new VADisplay(m_vaDisplay));
+    return display;
+}
+
+bool DecodeOutputX11::init()
+{
+    m_vaDisplay = createX11Display();
+    if (!m_vaDisplay)
+        return false;
+    return DecodeOutput::init();
+}
+
+bool DecodeOutputX11::setVideoSize(uint32_t width, uint32_t height)
 {
     if (m_window) {
         //todo, resize window;
@@ -409,64 +517,41 @@ bool DecodeOutputX11::setVideoSize(int width, int height)
     return DecodeOutput::setVideoSize(width, height);
 }
 
-bool DecodeOutputX11::init()
-{
-    extern int renderMode;
-    m_display = XOpenDisplay(NULL);
-    if (!m_display) {
-        fprintf(stderr, "Failed to XOpenDisplay during DecodeOutputX11::%s\n", __FUNCTION__);
-        return false;
-    }
-
-    NativeDisplay nativeDisplay;
-    if (renderMode == 0) {
-        nativeDisplay.type = NATIVE_DISPLAY_DRM;
-        nativeDisplay.handle = 0;
-        m_decoder->setNativeDisplay(&nativeDisplay);
-    } else {
-        nativeDisplay.type = NATIVE_DISPLAY_X11;
-        nativeDisplay.handle = (intptr_t)m_display;
-        m_decoder->setNativeDisplay(&nativeDisplay);
-    }
-
-    return true;
-}
-
-DecodeOutputX11::DecodeOutputX11(IVideoDecoder* decoder):DecodeOutput(decoder), m_window(0)
+DecodeOutputX11::DecodeOutputX11()
+    : m_display(NULL)
+    , m_window(0)
 {
 }
 
 DecodeOutputX11::~DecodeOutputX11()
 {
+    m_vaDisplay.reset();
     if (m_window)
         XDestroyWindow(m_display, m_window);
     if (m_display)
         XCloseDisplay(m_display);
-
 }
 
-DecodeOutputXWindow::DecodeOutputXWindow(IVideoDecoder* decoder)
-    :DecodeOutputX11(decoder)
+bool DecodeOutputXWindow::output(SharedPtr<VideoFrame>& frame)
 {
-}
+    if (!setVideoSize(frame->crop.width, frame->crop.height))
+        return false;
 
-Decode_Status DecodeOutputXWindow::renderOneFrame(bool drain)
-{
-    int64_t timeStamp;
-    return  m_decoder->getOutput(m_window, &timeStamp, 0, 0, m_width, m_height, drain);
+    VAStatus status = vaPutSurface(*m_vaDisplay, (VASurfaceID)frame->surface,
+        m_window, 0, 0, frame->crop.width, frame->crop.height,
+        frame->crop.x, frame->crop.y, frame->crop.width, frame->crop.height,
+        NULL, 0, 0);
+    return checkVaapiStatus(status, "vaPutSurface");
 }
 
 #ifdef __ENABLE_TESTS_GLES__
-
-class DecodeOutputEgl : public DecodeOutputX11
-{
+class DecodeOutputEgl : public DecodeOutputX11 {
 public:
-    virtual bool setVideoSize(int width, int height) = 0;
-    DecodeOutputEgl(IVideoDecoder* decoder);
+    DecodeOutputEgl();
     virtual ~DecodeOutputEgl();
-
 protected:
-    bool setVideoSize(int width, int height, bool externalTexture);
+    virtual bool setVideoSize(uint32_t width, uint32_t height) = 0;
+    bool setVideoSize(uint32_t width, uint32_t height, bool externalTexture);
     EGLContextType *m_eglContext;
     GLuint m_textureId;
 private:
@@ -476,28 +561,35 @@ private:
 class DecodeOutputPixelMap : public DecodeOutputEgl
 {
 public:
-    virtual bool setVideoSize(int width, int height);
-    DecodeOutputPixelMap(IVideoDecoder* decoder);
-    Decode_Status renderOneFrame(bool drain);
+    virtual bool output(SharedPtr<VideoFrame>& frame);
+
+    DecodeOutputPixelMap();
     virtual ~DecodeOutputPixelMap();
 private:
+    virtual bool setVideoSize(uint32_t width, uint32_t height);
     XID m_pixmap;
+    DISALLOW_COPY_AND_ASSIGN(DecodeOutputPixelMap);
 };
 
-// supports either Linux dma_buf handle or DRM flink name
 class DecodeOutputDmabuf: public DecodeOutputEgl
 {
 public:
-    virtual bool setVideoSize(int width, int height);
-    virtual Decode_Status renderOneFrame(bool drain);
-    DecodeOutputDmabuf(IVideoDecoder* decoder, VideoDataMemoryType memoryType);
+    DecodeOutputDmabuf(VideoDataMemoryType memoryType);
+    virtual ~DecodeOutputDmabuf(){};
+    virtual bool output(SharedPtr<VideoFrame>& frame);
+
+protected:
+    EGLImageKHR createEGLImage(SharedPtr<VideoFrame>&);
+    bool draw2D(EGLImageKHR&);
+    virtual bool setVideoSize(uint32_t width, uint32_t height);
+
 private:
     VideoDataMemoryType m_memoryType;
-
+    SharedPtr<FrameAllocator> m_allocator;
+    SharedPtr<IVideoPostProcess> m_vpp;
 };
 
-
-bool DecodeOutputEgl::setVideoSize(int width, int height, bool externalTexture)
+bool DecodeOutputEgl::setVideoSize(uint32_t width, uint32_t height, bool externalTexture)
 {
     if (!DecodeOutputX11::setVideoSize(width, height))
         return false;
@@ -506,8 +598,9 @@ bool DecodeOutputEgl::setVideoSize(int width, int height, bool externalTexture)
     return m_eglContext;
 }
 
-DecodeOutputEgl::DecodeOutputEgl(IVideoDecoder* decoder)
-    :DecodeOutputX11(decoder),m_eglContext(NULL),m_textureId(0)
+DecodeOutputEgl::DecodeOutputEgl()
+    : m_eglContext(NULL)
+    , m_textureId(0)
 {
 }
 
@@ -519,7 +612,7 @@ DecodeOutputEgl::~DecodeOutputEgl()
         eglRelease(m_eglContext);
 }
 
-bool DecodeOutputPixelMap::setVideoSize(int width, int height)
+bool DecodeOutputPixelMap::setVideoSize(uint32_t width, uint32_t height)
 {
     if (!DecodeOutputEgl::setVideoSize(width, height, false))
         return false;
@@ -534,18 +627,24 @@ bool DecodeOutputPixelMap::setVideoSize(int width, int height)
     return m_textureId;
 }
 
-Decode_Status DecodeOutputPixelMap::renderOneFrame(bool drain)
+bool DecodeOutputPixelMap::output(SharedPtr<VideoFrame>& frame)
 {
-    int64_t timeStamp;
-    Decode_Status status = m_decoder->getOutput(m_pixmap, &timeStamp, 0, 0, m_width, m_height, drain);
-    if (status == RENDER_SUCCESS) {
-        drawTextures(m_eglContext, GL_TEXTURE_2D, &m_textureId, 1);
+    if (!setVideoSize(frame->crop.width, frame->crop.height))
+        return false;
+
+    VAStatus status = vaPutSurface(*m_vaDisplay, (VASurfaceID)frame->surface,
+        m_pixmap, 0, 0, m_width, m_height,
+        frame->crop.x, frame->crop.y, frame->crop.width, frame->crop.height,
+        NULL, 0, 0);
+    if (!checkVaapiStatus(status, "vaPutSurface")) {
+        return false;
     }
-    return status;
+    drawTextures(m_eglContext, GL_TEXTURE_2D, &m_textureId, 1);
+    return true;
 }
 
-DecodeOutputPixelMap::DecodeOutputPixelMap(IVideoDecoder* decoder)
-    :DecodeOutputEgl(decoder),m_pixmap(0)
+DecodeOutputPixelMap::DecodeOutputPixelMap()
+    : m_pixmap(0)
 {
 }
 
@@ -555,115 +654,125 @@ DecodeOutputPixelMap::~DecodeOutputPixelMap()
         XFreePixmap(m_display, m_pixmap);
 }
 
-bool DecodeOutputDmabuf::setVideoSize(int width, int height)
+bool DecodeOutputDmabuf::setVideoSize(uint32_t width, uint32_t height)
 {
     if (!DecodeOutputEgl::setVideoSize(width, height, m_memoryType == VIDEO_DATA_MEMORY_TYPE_DMA_BUF))
         return false;
-    if (!m_textureId)
+    if (!m_textureId) {
         glGenTextures(1, &m_textureId);
+        m_vpp.reset(createVideoPostProcess(YAMI_VPP_SCALER), releaseVideoPostProcess);
+        m_vpp->setNativeDisplay(*m_nativeDisplay);
+        m_allocator.reset(new PooledFrameAllocator(m_vaDisplay, 3));
+        if (!m_allocator->setFormat(VA_FOURCC_BGRX, m_width, m_height)) {
+            m_allocator.reset();
+            fprintf(stderr, "m_allocator setFormat failed\n");
+            return false;
+        }
+    }
     return m_textureId;
 }
 
-Decode_Status DecodeOutputDmabuf::renderOneFrame(bool drain)
+EGLImageKHR DecodeOutputDmabuf::createEGLImage(SharedPtr<VideoFrame>& frame)
+{
+    EGLImageKHR eglImage = EGL_NO_IMAGE_KHR;
+    VASurfaceID surface = (VASurfaceID)frame->surface;
+    VAImage image;
+    VAStatus status = vaDeriveImage(*m_vaDisplay, surface, &image);
+    if (!checkVaapiStatus(status, "vaDeriveImage"))
+        return eglImage;
+    VABufferInfo m_bufferInfo;
+    if (m_memoryType == VIDEO_DATA_MEMORY_TYPE_DRM_NAME)
+        m_bufferInfo.mem_type = VA_SURFACE_ATTRIB_MEM_TYPE_KERNEL_DRM;
+    else if (m_memoryType == VIDEO_DATA_MEMORY_TYPE_DMA_BUF)
+        m_bufferInfo.mem_type = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME;
+    status = vaAcquireBufferHandle(*m_vaDisplay, image.buf, &m_bufferInfo);
+    if (!checkVaapiStatus(status, "vaDeriveImage")) {
+        vaDestroyImage(*m_vaDisplay, image.image_id);
+        return eglImage;
+    }
+    eglImage = createEglImageFromHandle(m_eglContext->eglContext.display, m_eglContext->eglContext.context,
+        m_memoryType, m_bufferInfo.handle, image.width, image.height, image.pitches[0]);
+    checkVaapiStatus(vaReleaseBufferHandle(*m_vaDisplay, image.buf), "vaReleaseBufferHandle");
+    checkVaapiStatus(vaDestroyImage(*m_vaDisplay, image.image_id), "vaDestroyImage");
+    return eglImage;
+}
+
+bool DecodeOutputDmabuf::draw2D(EGLImageKHR& eglImage)
 {
     GLenum target = GL_TEXTURE_2D;
     if (m_memoryType == VIDEO_DATA_MEMORY_TYPE_DMA_BUF)
         target = GL_TEXTURE_EXTERNAL_OES;
     glBindTexture(target, m_textureId);
-
-    m_frame.memoryType = m_memoryType;
-    m_frame.fourcc = VA_FOURCC_BGRX; // VAAPI BGRA match MESA ARGB
-    m_frame.width = m_width;
-    m_frame.height = m_height;
-    Decode_Status status = m_decoder->getOutput(&m_frame, drain);
-    if (status == RENDER_SUCCESS) {
-       EGLImageKHR eglImage = EGL_NO_IMAGE_KHR;
-        ASSERT(m_width == m_frame.width && m_height == m_frame.height);
-        eglImage = createEglImageFromHandle(m_eglContext->eglContext.display, m_eglContext->eglContext.context, m_frame.memoryType, m_frame.handle,
-                m_frame.width, m_frame.height, m_frame.pitch[0]);
-        if (eglImage != EGL_NO_IMAGE_KHR) {
-            imageTargetTexture2D(target, eglImage);
-            glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            drawTextures(m_eglContext, target, &m_textureId, 1);
-
-            destroyImage(m_eglContext->eglContext.display, eglImage);
-        } else {
-            ERROR("fail to create EGLImage from dma_buf");
-        }
-    }
-    return status;
-}
-
-DecodeOutputDmabuf::DecodeOutputDmabuf(IVideoDecoder* decoder, VideoDataMemoryType memoryType)
-    :DecodeOutputEgl(decoder), m_memoryType(memoryType)
-{
-}
-
-#endif // __ENABLE_TESTS_GLES__
-
-#endif //__ENABLE_X11__
-
-DecodeOutput* DecodeOutput::create(IVideoDecoder* decoder, int mode)
-{
-#if  __ENABLE_MD5__
-    if(mode == -2)
-        return new DecodeOutputExtractMD5(decoder);
-#endif
-    if (mode == -1)
-        return new DecodeOutputNull(decoder);
-    if (mode == 0)
-        return new DecodeOutputFileDump(decoder);
-#ifdef __ENABLE_X11__
-    DecodeOutputX11* output;
-    switch (mode) {
-        case 1:
-            output = new DecodeOutputXWindow(decoder);
-            break;
-#ifdef __ENABLE_TESTS_GLES__
-        case 2:
-            output = new DecodeOutputPixelMap(decoder);
-            break;
-        case 3:
-            output = new DecodeOutputDmabuf(decoder, VIDEO_DATA_MEMORY_TYPE_DRM_NAME);
-            break;
-        case 4:
-            output = new DecodeOutputDmabuf(decoder, VIDEO_DATA_MEMORY_TYPE_DMA_BUF);
-            break;
-#endif //__ENABLE_TESTS_GLES__
-        default:
-            assert(0 && "do not support this render mode");
-    }
-    if (output && !output->init()) {
-        delete output;
-        output = NULL;
-    }
-    return output;
-#else //__ENABLE_X11__
-    return NULL;
-#endif //__ENABLE_X11__
-}
-
-bool renderOutputFrames(DecodeOutput* output, uint32_t maxframes, bool drain)
-{
-    Decode_Status status;
-    do {
-        if(output->renderFrameCount() == maxframes)
-            break;
-        status = output->processOneFrame(drain);
-    } while (status != RENDER_NO_AVAILABLE_FRAME && status > 0);
+    imageTargetTexture2D(target, eglImage);
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    drawTextures(m_eglContext, target, &m_textureId, 1);
     return true;
 }
 
-extern char *dumpOutputName;
-extern uint32_t dumpFourcc;
-extern char *inputFileName;
-bool configDecodeOutput(DecodeOutput* output)
+bool DecodeOutputDmabuf::output(SharedPtr<VideoFrame>& frame)
 {
-    bool ret = true;
-    DecodeOutputRaw* dump = dynamic_cast<DecodeOutputRaw*>(output);
-    if (dump) {
-        ret = dump->config(inputFileName, dumpOutputName, dumpFourcc);
+    setVideoSize(frame->crop.width, frame->crop.height);
+
+    SharedPtr<VideoFrame> dest = m_allocator->alloc();
+    YamiStatus result = m_vpp->process(frame, dest);
+    if (result != YAMI_SUCCESS) {
+        ERROR("vpp process failed, status = %d", result);
+        return false;
     }
-    return ret;
+    EGLImageKHR eglImage = createEGLImage(dest);
+    if (eglImage == EGL_NO_IMAGE_KHR) {
+        ERROR("Failed to map %p to egl image", (void*)dest->surface);
+        return false;
+    }
+    draw2D(eglImage);
+    return destroyImage(m_eglContext->eglContext.display, eglImage);
+}
+
+DecodeOutputDmabuf::DecodeOutputDmabuf(VideoDataMemoryType memoryType)
+    : m_memoryType(memoryType)
+{
+}
+
+#endif //__ENABLE_TESTS_GLES__
+#endif //__ENABLE_X11__
+
+DecodeOutput* DecodeOutput::create(int renderMode, uint32_t fourcc, const char* inputFile, const char* outputFile)
+{
+    DecodeOutput* output;
+    switch (renderMode) {
+#ifdef __ENABLE_MD5__
+    case -2:
+        output = new DecodeOutputMD5(outputFile, inputFile, fourcc);
+        break;
+#endif //__ENABLE_MD5__
+    case -1:
+        output = new DecodeOutputNull();
+        break;
+    case 0:
+        output = new DecodeOutputDump(outputFile, inputFile, fourcc);
+        break;
+#ifdef __ENABLE_X11__
+    case 1:
+        output = new DecodeOutputXWindow();
+        break;
+#ifdef __ENABLE_TESTS_GLES__
+    case 2:
+        output = new DecodeOutputPixelMap();
+        break;
+    case 3:
+        output = new DecodeOutputDmabuf(VIDEO_DATA_MEMORY_TYPE_DRM_NAME);
+        break;
+    case 4:
+        output = new DecodeOutputDmabuf(VIDEO_DATA_MEMORY_TYPE_DMA_BUF);
+        break;
+#endif //__ENABLE_TESTS_GLES__
+#endif //__ENABLE_X11__
+    default:
+        fprintf(stderr, "renderMode:%d, do not support this render mode\n", renderMode);
+        return NULL;
+    }
+    if (!output->init())
+        fprintf(stderr, "DecodeOutput init failed\n");
+    return output;
 }
