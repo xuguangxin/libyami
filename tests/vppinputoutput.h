@@ -99,7 +99,6 @@ public:
         if (fourcc == VA_FOURCC_BGRX
             || fourcc == VA_FOURCC_BGRA) {
             rtformat = VA_RT_FORMAT_RGB32;
-            ERROR("rgb32");
         } else {
             rtformat = VA_RT_FORMAT_YUV420;
         }
@@ -119,6 +118,7 @@ public:
             f->crop.height = height;
             f->fourcc = fourcc;
             f->surface = (intptr_t)m_surfaces[i];
+            f->fourcc = fourcc;
             buffers.push_back(f);
         }
         m_pool = VideoPool<VideoFrame>::create(buffers);
