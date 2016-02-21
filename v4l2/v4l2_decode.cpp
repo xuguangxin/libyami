@@ -206,31 +206,30 @@ bool V4l2Decoder::outputPulse(uint32_t &index)
 #else
 bool V4l2Decoder::outputPulse(uint32_t &index)
 {
-    Decode_Status status = DECODE_SUCCESS;
-
-    VideoFrameRawData *frame=NULL;
+    SharedPtr<VideoFrame> frame;
 
     ASSERT(index >= 0 && index < m_maxBufferCount[OUTPUT]);
     DEBUG("index: %d", index);
 
-    frame = &m_outputRawFrames[index];
+    //frame = &m_outputRawFrames[index];
     if (m_memoryType == VIDEO_DATA_MEMORY_TYPE_RAW_COPY) {
-        if (!m_bufferSpace[OUTPUT])
+        /* if (!m_bufferSpace[OUTPUT])
             return false;
         ASSERT(frame->handle);
         frame->fourcc = VA_FOURCC_NV12;
-        frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_COPY;
+        frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_COPY;*/
+        ERROR("TODO: support raw copy");
+        return false;
     }
     if (m_memoryType == VIDEO_DATA_MEMORY_TYPE_DRM_NAME || m_memoryType == VIDEO_DATA_MEMORY_TYPE_DMA_BUF) {
         if (m_eglVaapiImages.empty())
             return false;
-        frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
     }
 
 
-    status = m_decoder->getOutput(frame);
+    frame = m_decoder->getOutput();
 
-    if (status == RENDER_NO_AVAILABLE_FRAME) {
+    if (!frame) {
         if (eosState() == EosStateInput) {
             setEosState(EosStateOutput);
             DEBUG("flush-debug flush done on OUTPUT thread");
@@ -240,14 +239,12 @@ bool V4l2Decoder::outputPulse(uint32_t &index)
             DEBUG("seek/EOS flush, return empty buffer");
             return false;
         }
+        return false;
     }
 
-    if (status != RENDER_SUCCESS)
-        return false;
     if (m_memoryType == VIDEO_DATA_MEMORY_TYPE_DRM_NAME || m_memoryType == VIDEO_DATA_MEMORY_TYPE_DMA_BUF) {
         // FIXME, it introduce one GPU copy; which is not necessary in major case and should be avoided in most case
-        m_eglVaapiImages[index]->blt(*frame);
-        m_decoder->renderDone(frame);
+        m_eglVaapiImages[index]->blt(frame);
         if (!m_bindEglImage)
             m_eglVaapiImages[index]->exportFrame(m_memoryType, m_outputRawFrames[index]);
     }
