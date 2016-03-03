@@ -9,7 +9,7 @@ LIBYAMI_DOC_STRIP_DIR = $(top_srcdir)/common $(top_srcdir)/vaapi $(top_srcdir)/d
 LIBYAMI_DOC_STRIP_FILES = vaapibuffer.h \
 	$(top_srcdir)/vaapi/vaapiimage.h \
 	$(top_srcdir)/vaapi/vaapiptrs.h \
-	$(top_srcdir)/vaapi/vaapisurface.h \
+	$(top_srcdir)/vaapi/VaapiSurface.h \
 	$(top_srcdir)/vaapi/vaapiutils.h \
 	$(top_srcdir)/decoder/vaapidecoder_base.h \
 	$(top_srcdir)/decoder/vaapidecoder_h264.h \

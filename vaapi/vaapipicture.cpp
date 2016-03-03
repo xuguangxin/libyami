@@ -29,7 +29,7 @@
 #include "vaapibuffer.h"
 #include "vaapidisplay.h"
 #include "vaapicontext.h"
-#include "vaapisurface.h"
+#include "VaapiSurface.h"
 #include "vaapi/vaapiutils.h"
 
 namespace YamiMediaCodec{
@@ -111,5 +111,10 @@ bool VaapiPicture::addObject(std::vector < BufObjectPtr >& objects,
         return false;
     objects.push_back(object);
     return true;
+}
+
+bool VaapiPicture::sync()
+{
+    return vaSyncSurface(m_display->getID(), getSurfaceID()) == VA_STATUS_SUCCESS;
 }
 }

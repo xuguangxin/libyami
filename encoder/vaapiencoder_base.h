@@ -32,7 +32,7 @@
 #include "vaapiencpicture.h"
 #include "vaapi/vaapibuffer.h"
 #include "vaapi/vaapiptrs.h"
-#include "vaapi/vaapisurface.h"
+#include "vaapi/VaapiSurface.h"
 
 #include <deque>
 #include <utility>
