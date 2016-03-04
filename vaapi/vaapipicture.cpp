@@ -26,7 +26,7 @@
 #include "vaapipicture.h"
 
 #include "common/log.h"
-#include "vaapibuffer.h"
+#include "VaapiBuffer.h"
 #include "vaapidisplay.h"
 #include "vaapicontext.h"
 #include "VaapiSurface.h"
@@ -74,8 +74,7 @@ bool VaapiPicture::render(BufObjectPtr& buffer)
     if (!buffer)
         return true;
 
-    if (buffer->isMapped())
-        buffer->unmap();
+    buffer->unmap();
 
     bufferID = buffer->getID();
     if (bufferID == VA_INVALID_ID)

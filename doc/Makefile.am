@@ -6,7 +6,7 @@ EXTRA_DIST = \
 	$(NULL)
 
 LIBYAMI_DOC_STRIP_DIR = $(top_srcdir)/common $(top_srcdir)/vaapi $(top_srcdir)/decoder $(top_srcdir)/encoder $(top_srcdir)/interface
-LIBYAMI_DOC_STRIP_FILES = vaapibuffer.h \
+LIBYAMI_DOC_STRIP_FILES = VaapiBuffer.h \
 	$(top_srcdir)/vaapi/vaapiimage.h \
 	$(top_srcdir)/vaapi/vaapiptrs.h \
 	$(top_srcdir)/vaapi/VaapiSurface.h \

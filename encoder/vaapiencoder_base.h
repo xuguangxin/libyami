@@ -30,7 +30,7 @@
 #include "common/log.h"
 #include "common/surfacepool.h"
 #include "vaapiencpicture.h"
-#include "vaapi/vaapibuffer.h"
+#include "vaapi/VaapiBuffer.h"
 #include "vaapi/vaapiptrs.h"
 #include "vaapi/VaapiSurface.h"
 
