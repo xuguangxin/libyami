@@ -24,7 +24,6 @@
 
 #include "vaapi/VaapiBuffer.h"
 #include "vaapi/vaapiptrs.h"
-#include "vaapi/vaapitypes.h"
 #include <stdlib.h>
 
 namespace YamiMediaCodec{
