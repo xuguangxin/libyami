@@ -6,7 +6,7 @@ LOCAL_SRC_FILES := \
         vaapipicture.cpp \
         VaapiBuffer.cpp \
         VaapiSurface.cpp\
-        vaapiimageutils.cpp \
+        VaapiUtils.cpp \
         vaapidisplay.cpp \
         vaapicontext.cpp \
         vaapisurfaceallocator.cpp \

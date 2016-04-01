@@ -31,7 +31,6 @@
 #include "common/log.h"
 #include "common/utils.h"
 #include "vaapi/VaapiUtils.h"
-#include "vaapi/vaapiimageutils.h"
 
 #if __ENABLE_MD5__
 #include <openssl/md5.h>

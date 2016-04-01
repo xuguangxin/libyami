@@ -35,7 +35,6 @@
 #include "vaapi/vaapicontext.h"
 #include "vaapi/vaapisurfaceallocator.h"
 #include "vaapi/VaapiUtils.h"
-#include "vaapi/vaapiimageutils.h"
 
 const uint32_t MaxOutputBuffer=5;
 namespace YamiMediaCodec{

@@ -20,6 +20,12 @@
 #include "common/log.h"
 #include <va/va.h>
 
+namespace YamiMediaCodec {
+
+uint8_t* mapSurfaceToImage(VADisplay display, intptr_t surface, VAImage& image);
+
+void unmapImage(VADisplay display, const VAImage& image);
+
 #define checkVaapiStatus(status, prompt)                     \
     (                                                        \
         {                                                    \
@@ -29,5 +35,6 @@
                 ERROR("%s: %s", prompt, vaErrorStr(status)); \
             ret;                                             \
         })
+}
 
 #endif //VaapiUtils_h
