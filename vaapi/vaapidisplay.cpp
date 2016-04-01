@@ -31,8 +31,7 @@
 #include <list>
 #include "common/log.h"
 #include "common/lock.h"
-#include "vaapi/vaapiutils.h"
-
+#include "vaapi/VaapiUtils.h"
 
 using std::list;
 /**

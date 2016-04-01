@@ -30,7 +30,7 @@
 #include "vaapidisplay.h"
 #include "vaapicontext.h"
 #include "VaapiSurface.h"
-#include "vaapi/vaapiutils.h"
+#include "vaapi/VaapiUtils.h"
 
 namespace YamiMediaCodec{
 VaapiPicture::VaapiPicture(const ContextPtr& context,

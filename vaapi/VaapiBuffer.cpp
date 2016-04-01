@@ -25,7 +25,7 @@
 
 #include "VaapiBuffer.h"
 
-#include "vaapiutils.h"
+#include "VaapiUtils.h"
 #include "vaapicontext.h"
 #include "vaapidisplay.h"
 

@@ -10,7 +10,7 @@ LIBYAMI_DOC_STRIP_FILES = VaapiBuffer.h \
 	$(top_srcdir)/vaapi/vaapiimage.h \
 	$(top_srcdir)/vaapi/vaapiptrs.h \
 	$(top_srcdir)/vaapi/VaapiSurface.h \
-	$(top_srcdir)/vaapi/vaapiutils.h \
+	$(top_srcdir)/vaapi/VaapiUtils.h \
 	$(top_srcdir)/decoder/vaapidecoder_base.h \
 	$(top_srcdir)/decoder/vaapidecoder_h264.h \
 	$(top_srcdir)/decoder/vaapidecoder_jpeg.h \

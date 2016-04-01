@@ -25,7 +25,7 @@
 
 #include "common/log.h"
 #include "vaapi/vaapisurfaceallocator.h"
-#include "vaapi/vaapiutils.h"
+#include "vaapi/VaapiUtils.h"
 #include <vector>
 
 namespace YamiMediaCodec{

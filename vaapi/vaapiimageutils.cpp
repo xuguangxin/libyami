@@ -26,7 +26,7 @@
 
 #include "vaapiimageutils.h"
 
-#include "vaapiutils.h"
+#include "VaapiUtils.h"
 
 namespace YamiMediaCodec{
 

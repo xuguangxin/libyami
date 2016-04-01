@@ -5,7 +5,6 @@ libyami_vaapi_source_c = \
 	VaapiBuffer.cpp \
 	VaapiSurface.cpp\
 	vaapiimageutils.cpp \
-	vaapiutils.cpp \
 	vaapidisplay.cpp \
 	vaapicontext.cpp \
 	vaapisurfaceallocator.cpp \
@@ -16,7 +15,7 @@ libyami_vaapi_source_h_priv = \
 	VaapiBuffer.h \
 	VaapiSurface.h \
 	vaapiimageutils.h \
-	vaapiutils.h \
+	VaapiUtils.h \
 	vaapitypes.h \
 	vaapidisplay.h \
 	vaapicontext.h \
