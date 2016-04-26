@@ -24,6 +24,7 @@
 #endif
 #include "common/common_def.h"
 #include "vppoutputencode.h"
+#include "encodeoutputasync.h"
 
 EncodeParams::EncodeParams()
     : rcMode(RATE_CONTROL_CQP)
@@ -59,19 +60,9 @@ bool VppOutputEncode::init(const char* outputFileName, uint32_t /*fourcc*/, int 
     m_fourcc = VA_FOURCC('N', 'V', '1', '2');
     m_width = width;
     m_height = height;
+
     m_output.reset(EncodeOutput::create(outputFileName, m_width, m_height));
     return m_output;
-}
-
-void VppOutputEncode::initOuputBuffer()
-{
-    uint32_t maxOutSize;
-    m_encoder->getMaxOutSize(&maxOutSize);
-    m_buffer.resize(maxOutSize);
-    m_outputBuffer.bufferSize = maxOutSize;
-    m_outputBuffer.format = OUTPUT_EVERYTHING;
-    m_outputBuffer.data = &m_buffer[0];
-
 }
 
 static void setEncodeParam(const SharedPtr<IVideoEncoder>& encoder,
@@ -121,29 +112,35 @@ bool VppOutputEncode::config(NativeDisplay& nativeDisplay, const EncodeParams* e
     m_encoder->setNativeDisplay(&nativeDisplay);
     setEncodeParam(m_encoder, m_width, m_height, encParam);
 
+    uint32_t maxSize;
+    m_encoder->getMaxOutSize(&maxSize);
+    m_asyncOutput = EncodeOutputAsync::create(m_output, 5, maxSize);
+    if (!m_asyncOutput)
+        return false;
+    m_output.reset();//never touch m_output here.
+
     Encode_Status status = m_encoder->start();
     assert(status == ENCODE_SUCCESS);
-    initOuputBuffer();
     return true;
 }
 
 bool VppOutputEncode::output(const SharedPtr<VideoFrame>& frame)
 {
     Encode_Status status = ENCODE_SUCCESS;
-    bool drain = !frame;
     if (frame) {
         status = m_encoder->encode(frame);
         if (status != ENCODE_SUCCESS) {
             fprintf(stderr, "encode failed status = %d\n", status);
             return false;
         }
+    } else {
+        //TODO: flush the encoder
     }
-    do {
-        status = m_encoder->getOutput(&m_outputBuffer, drain);
-        if (status == ENCODE_SUCCESS
-            && !m_output->write(m_outputBuffer.data, m_outputBuffer.dataSize))
-             assert(0);
-    } while (status != ENCODE_BUFFER_NO_MORE);
+    SharedPtr<EncodedBuffer> encoded;
+    while ((encoded = m_encoder->getOutput())) {
+        if (!m_asyncOutput->write(encoded))
+            assert(0);
+    }
     return true;
 
 }

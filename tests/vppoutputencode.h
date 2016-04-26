@@ -60,6 +60,7 @@ public:
     string outputFileName;
 };
 
+class EncodeOutputAsync;
 class VppOutputEncode : public VppOutput
 {
 public:
@@ -69,12 +70,10 @@ public:
 protected:
     virtual bool init(const char* outputFileName, uint32_t fourcc, int width, int height);
 private:
-    void initOuputBuffer();
     const char* m_mime;
     SharedPtr<IVideoEncoder> m_encoder;
-    VideoEncOutputBuffer m_outputBuffer;
-    std::vector<uint8_t> m_buffer;
-    SharedPtr<EncodeOutput> m_output;
+    SharedPtr<EncodeOutput>  m_output;
+    SharedPtr<EncodeOutputAsync> m_asyncOutput;
 };
 
 #endif
