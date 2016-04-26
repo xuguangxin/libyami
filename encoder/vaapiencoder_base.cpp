@@ -512,7 +512,40 @@ Encode_Status VaapiEncoderBase::checkCodecData(VideoEncOutputBuffer * outBuffer)
     return ENCODE_SUCCESS;
 }
 
+class EncodedBufferImp : public EncodedBuffer{
+    typedef VaapiEncoderBase::PicturePtr PicturePtr;
+public:
+    EncodedBufferImp(const PicturePtr& picture)
+        :m_picture(picture)
+    {
+    }
+    Encode_Status getOutput(VideoEncOutputBuffer * outBuffer)
+    {
+        return m_picture->getOutput(outBuffer);
+    }
+private:
+    PicturePtr m_picture;
+};
+
 #ifndef __BUILD_GET_MV__
+SharedPtr<EncodedBuffer> VaapiEncoderBase::getOutput()
+{
+    SharedPtr<EncodedBuffer> encoded;
+
+    AutoLock l(m_lock);
+    if (m_output.empty())
+        return encoded;
+    PicturePtr picture = m_output.front();
+    m_output.pop_front();
+
+    //recycle surface
+    SurfacePtr surface;
+    picture->setSurface(surface);
+
+    encoded.reset(new EncodedBufferImp(picture));
+    return encoded;
+}
+
 Encode_Status VaapiEncoderBase::getOutput(VideoEncOutputBuffer * outBuffer, bool withWait)
 {
     bool isEmpty;

@@ -27,6 +27,13 @@
 #undef None // work around for compile in chromeos
 
 namespace YamiMediaCodec{
+
+/* hold encoded buffer here, we use this to support aysnc encode*/
+class EncodedBuffer {
+public:
+    virtual Encode_Status getOutput(VideoEncOutputBuffer * outBuffer) = 0;
+};
+
 /**
  * \class IVideoEncoder
  * \brief Abstract video encoding interface of libyami
@@ -54,6 +61,7 @@ class IVideoEncoder {
     virtual Encode_Status encode(const SharedPtr<VideoFrame>& frame) = 0;
 
 #ifndef __BUILD_GET_MV__
+    virtual SharedPtr<EncodedBuffer> getOutput() = 0;
     /**
      * \brief return one frame encoded data to client;
      * when withWait is false, ENCODE_BUFFER_NO_MORE will be returned if there is no available frame. \n

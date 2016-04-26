@@ -48,6 +48,7 @@ enum VaapiEncReorderState
 };
 
 class VaapiEncoderBase : public IVideoEncoder {
+    friend class EncodedBufferImp;
     typedef SharedPtr<VaapiEncPicture> PicturePtr;
 public:
     VaapiEncoderBase();
@@ -68,6 +69,7 @@ public:
     * and caller should provide a big enough buffer and call again
     */
 #ifndef __BUILD_GET_MV__
+    virtual SharedPtr<EncodedBuffer> getOutput();
     virtual Encode_Status getOutput(VideoEncOutputBuffer * outBuffer, bool withWait = false);
 #else
     virtual Encode_Status getOutput(VideoEncOutputBuffer * outBuffer, VideoEncMVBuffer* MVBuffer, bool withWait = false);
@@ -107,7 +109,7 @@ protected:
     //rate control related things
     void fill(VAEncMiscParameterHRD*) const ;
     void fill(VAEncMiscParameterRateControl*) const ;
-    void fill(VAEncMiscParameterFrameRate*) const;	
+    void fill(VAEncMiscParameterFrameRate*) const;
     bool ensureMiscParams (VaapiEncPicture*);
 
     //properties
