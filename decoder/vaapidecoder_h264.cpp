@@ -1603,6 +1603,7 @@ YamiStatus VaapiDecoderH264::checkDecodeContextChange(const SharedPtr<SPS>& sps)
         maxDecFrameBuffering = sps->num_ref_frames;
 
     YamiStatus status  = ensureSurfacePool(sps->m_width, sps->m_height, maxDecFrameBuffering);
+    ERROR("%dx%d, %d, status = %d", sps->m_width, sps->m_height, maxDecFrameBuffering, status);
     if (status == YAMI_SUCCESS)
         m_contextChanged = false;
     else
