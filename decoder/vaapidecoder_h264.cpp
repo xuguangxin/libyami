@@ -1607,7 +1607,7 @@ YamiStatus VaapiDecoderH264::checkDecodeContextChange(const SharedPtr<SPS>& sps)
         m_contextChanged = false;
     else
         m_contextChanged = true;
-    return m_contextChanged;
+    return status;
 }
 
 YamiStatus VaapiDecoderH264::ensureContext(const SharedPtr<SPS>& sps)
