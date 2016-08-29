@@ -1591,7 +1591,7 @@ uint32_t calcMaxDecFrameBufferingNum(const SharedPtr<SPS>& sps)
     return maxDpbFrames;
 }
 
-bool VaapiDecoderH264::isDecodeContextChanged(const SharedPtr<SPS>& sps)
+YamiStatus VaapiDecoderH264::checkDecodeContextChange(const SharedPtr<SPS>& sps)
 {
     uint32_t maxDecFrameBuffering;
 
@@ -1602,43 +1602,20 @@ bool VaapiDecoderH264::isDecodeContextChanged(const SharedPtr<SPS>& sps)
     else if (maxDecFrameBuffering < sps->num_ref_frames)
         maxDecFrameBuffering = sps->num_ref_frames;
 
-    if (m_configBuffer.surfaceWidth < sps->m_width
-        || m_configBuffer.surfaceHeight < sps->m_height
-        || m_configBuffer.surfaceNumber < (int32_t)maxDecFrameBuffering) {
-        m_configBuffer.surfaceNumber = maxDecFrameBuffering;
-        m_contextChanged = true;
-    } else
+    YamiStatus status  = ensureSurfacePool(sps->m_width, sps->m_heigh, maxDecFrameBuffering);
+    if (status == YAMI_SUCCESS)
         m_contextChanged = false;
-
+    else
+        m_contextChanged = true;
     return m_contextChanged;
 }
 
 YamiStatus VaapiDecoderH264::ensureContext(const SharedPtr<SPS>& sps)
 {
-    if (isDecodeContextChanged(sps)) {
-        INFO("frame size changed, reconfig codec. orig size %d x %d, new size: "
-             "%d x %d",
-             m_configBuffer.width, m_configBuffer.height, sps->m_width,
-             sps->m_height);
-        YamiStatus status = VaapiDecoderBase::terminateVA();
-        if (status != YAMI_SUCCESS)
-            return status;
-        m_configBuffer.width = sps->frame_cropping_flag ? sps->m_cropRectWidth
-                                                        : sps->m_width;
-        m_configBuffer.height = sps->frame_cropping_flag ? sps->m_cropRectHeight
-                                                         : sps->m_height;
-        m_configBuffer.surfaceWidth = sps->m_width;
-        m_configBuffer.surfaceHeight = sps->m_height;
-        m_configBuffer.flag |= HAS_SURFACE_NUMBER;
-        m_configBuffer.profile
-            = VAProfileH264High; // FIXME: set different profile later
-        status = VaapiDecoderBase::start(&m_configBuffer);
-        if (status != YAMI_SUCCESS)
-            return status;
-        // return YAMI_DECODE_FORMAT_CHANGE to info upper layer va context changed
-        return YAMI_DECODE_FORMAT_CHANGE;
-    }
-    return (m_context) ? YAMI_SUCCESS : YAMI_FAIL;
+    YamiStatus status = checkDecodeContextChange(sps);
+    if (status != YAMI_SUCCESS)
+        return status;
+    return ensureProfile(VAProfileH264High);
 }
 
 SurfacePtr VaapiDecoderH264::createSurface(const SliceHeader* const slice)
