@@ -215,7 +215,7 @@ public:
         return m_mime;
     }
 
-    bool getFrame(VideoDecoderBuffer& buffer, FrameInfo& info)
+    bool getFrame(VideoDecodeBuffer& buffer, FrameInfo& info)
     {
         FrameData& d = m_data[m_idx];
         if (d.data != NULL) {
@@ -273,8 +273,8 @@ TEST_P(DecodeApiTest, Format_Change)
         ASSERT_TRUE(format);
         ASSERT_EQ(info.width, format->width);
         ASSERT_EQ(info.height, format->height);
-        ASSERT_EQ(YAMI_SUCCESS, decoder.decode(&buffer));
-        SharedPtr<VideoFrame> output(decoder.getOutput());
+        ASSERT_EQ(YAMI_SUCCESS, decoder->decode(&buffer));
+        SharedPtr<VideoFrame> output(decoder->getOutput());
         ASSERT_TRUE(bool(output));
         ASSERT_EQ(info.width, output->crop.width);
         ASSERT_EQ(info.height, output->crop.height);
@@ -290,6 +290,6 @@ void PrintTo(const TestDecodeFrames::Shared& t, std::ostream* os)
 INSTANTIATE_TEST_CASE_P(
     VaapiDecoder, DecodeApiTest,
     ::testing::Values(
-        TestDecodeFrames::create(g_h264data, YAMI_MIME_H264))),
+        TestDecodeFrames::create(g_h264data, YAMI_MIME_H264)))
 }
 
