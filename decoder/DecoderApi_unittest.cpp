@@ -290,6 +290,6 @@ void PrintTo(const TestDecodeFrames::Shared& t, std::ostream* os)
 INSTANTIATE_TEST_CASE_P(
     VaapiDecoder, DecodeApiTest,
     ::testing::Values(
-        TestDecodeFrames::create(g_h264data, YAMI_MIME_H264)))
+        TestDecodeFrames::create(g_h264data, YAMI_MIME_H264)));
 }
 
