@@ -262,7 +262,8 @@ TEST_P(DecodeApiTest, Format_Change)
     VideoDecodeBuffer buffer;
     FrameInfo info;
 
-    config.flag = 0;
+    memset(&config, 0, sizeof(config));
+
 
     decoder.reset(createVideoDecoder(frames.getMime()),   releaseVideoDecoder);
     ASSERT_TRUE(bool(decoder));
