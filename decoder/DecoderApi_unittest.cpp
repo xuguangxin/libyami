@@ -30,12 +30,13 @@
 // for more details.
 //
 #include "common/factory_unittest.h"
-
+#include "common/common_def.h"
 // primary header
 #include "VideoDecoderHost.h"
 
 // system headers
 #include <algorithm>
+#include <stdint.h>
 
 namespace YamiMediaCodec {
 
@@ -289,6 +290,6 @@ void PrintTo(const TestDecodeBuffer::Shared& t, std::ostream* os)
 INSTANTIATE_TEST_CASE_P(
     VaapiDecoder, JPEGTest,
     ::testing::Values(
-        TestDecodeBuffer::create(g_h264data, YAMI_MIME_H264),
-
+        TestDecodeBuffer::create(g_h264data, YAMI_MIME_H264))),
 }
+
