@@ -48,7 +48,7 @@ struct FrameInfo
 };
 
 struct FrameData {
-    unit8_t* data;
+    uint8_t* data;
     uint32_t size;
     FrameInfo info;
 };
@@ -200,10 +200,10 @@ static FrameData g_h264data[] = {
 class TestDecodeFrames
 {
 public:
-    typedef SharedPtr<TestDecodeBuffer> Shared;
+    typedef SharedPtr<TestDecodeFrames> Shared;
 
     static Shared create(
-        const FrameData* data;
+        const FrameData* data,
         const char* mime)
     {
         Shared frames(new TestDecodeBuffer(data, mime));
@@ -288,7 +288,7 @@ void PrintTo(const TestDecodeBuffer::Shared& t, std::ostream* os)
 }
 
 INSTANTIATE_TEST_CASE_P(
-    VaapiDecoder, JPEGTest,
+    VaapiDecoder, DecodeApiTest,
     ::testing::Values(
         TestDecodeBuffer::create(g_h264data, YAMI_MIME_H264))),
 }
