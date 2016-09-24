@@ -217,7 +217,7 @@ public:
 
     bool getFrame(VideoDecodeBuffer& buffer, FrameInfo& info)
     {
-        FrameData& d = m_data[m_idx];
+        const FrameData& d = m_data[m_idx];
         if (d.data != NULL) {
             buffer.data = d.data;
             buffer.size  = d.size;
