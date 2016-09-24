@@ -206,7 +206,7 @@ public:
         const FrameData* data,
         const char* mime)
     {
-        Shared frames(new TestDecodeBuffer(data, mime));
+        Shared frames(new TestDecodeFrames(data, mime));
         return frames;
     }
 
@@ -228,7 +228,7 @@ public:
         return false;
     }
 
-    friend std::ostream& operator <<(std::ostream& os, const TestDecodeBuffer& t)
+    friend std::ostream& operator <<(std::ostream& os, const TestDecodeFrames& t)
     {
         os << t.m_mime;
         return os;
@@ -269,8 +269,8 @@ TEST_P(DecodeApiTest, Format_Change)
     ASSERT_EQ(YAMI_SUCCESS, decoder->start(&config));
     while (frames.getFrame(buffer, info)) {
         ASSERT_EQ(YAMI_DECODE_FORMAT_CHANGE, decoder->decode(&buffer));
-        VideoFormatInfo* format = decoder->getFormatInfo();
-        ASSERT_TRUE(fromat);
+        const VideoFormatInfo* format = decoder->getFormatInfo();
+        ASSERT_TRUE(format);
         ASSERT_EQ(info.width, format->width);
         ASSERT_EQ(info.height, format->height);
         ASSERT_EQ(YAMI_SUCCESS, decoder.decode(&buffer));
@@ -281,8 +281,8 @@ TEST_P(DecodeApiTest, Format_Change)
     }
 }
 
-/** Teach Google Test how to print a TestDecodeBuffer::Shared object */
-void PrintTo(const TestDecodeBuffer::Shared& t, std::ostream* os)
+/** Teach Google Test how to print a TestDecodeFrames::Shared object */
+void PrintTo(const TestDecodeFrames::Shared& t, std::ostream* os)
 {
     *os << *t;
 }
@@ -290,6 +290,6 @@ void PrintTo(const TestDecodeBuffer::Shared& t, std::ostream* os)
 INSTANTIATE_TEST_CASE_P(
     VaapiDecoder, DecodeApiTest,
     ::testing::Values(
-        TestDecodeBuffer::create(g_h264data, YAMI_MIME_H264))),
+        TestDecodeFrames::create(g_h264data, YAMI_MIME_H264))),
 }
 
