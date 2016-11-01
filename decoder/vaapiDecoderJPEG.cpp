@@ -401,10 +401,6 @@ YamiStatus VaapiDecoderJPEG::start(VideoConfigBuffer* buffer)
 {
     DEBUG("%s", __func__);
 
-    m_configBuffer = *buffer;
-    m_configBuffer.surfaceNumber = 2;
-    m_configBuffer.profile = VAProfileJPEGBaseline;
-
     /* We can't start until decoding has started */
     if (!m_impl.get())
         return YAMI_SUCCESS;
@@ -424,21 +420,16 @@ YamiStatus VaapiDecoderJPEG::start(VideoConfigBuffer* buffer)
         ERROR("Unsupported JPEG profile. Only JPEG Baseline is supported.");
         return YAMI_FAIL;
     }
-
-    m_configBuffer.width = frame->imageWidth;
-    m_configBuffer.height = frame->imageHeight;
-    m_configBuffer.surfaceWidth = frame->imageWidth;
-    m_configBuffer.surfaceHeight = frame->imageHeight;
-    m_configBuffer.fourcc = getFourcc(frame);
-    if (!m_configBuffer.fourcc) {
+    uint32_t fourcc = getFourcc(frame);
+    if (!fourcc) {
+        ERROR("unspported fourcc %.4s", (char*)&fourcc);
         return YAMI_UNSUPPORTED;
     }
 
-    /* Now we can actually start */
-    if (VaapiDecoderBase::start(&m_configBuffer) != YAMI_SUCCESS)
-        return YAMI_FAIL;
-
-    return YAMI_DECODE_FORMAT_CHANGE;
+    if (setFormat(frame->imageWidth, frame->imageHeight,
+            frame->imageWidth, frame->imageHeight, 2, fourcc))
+        return YAMI_DECODE_FORMAT_CHANGE;
+    return ensureProfile(VAProfileJPEGBaseline);
 }
 
 YamiStatus VaapiDecoderJPEG::finish()
