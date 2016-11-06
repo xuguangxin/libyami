@@ -52,7 +52,7 @@ libyamiv4l2_la_LDFLAGS     = $(libyamiv4l2_ldflags) $(AM_LDFLAGS)
 libyamiv4l2_la_CPPFLAGS    = $(libyamiv4l2_cppflags) $(AM_CPPFLAGS)
 
 if ENABLE_UNITTESTS
--include Makefile.unittest
+include Makefile.unittest
 endif
 
 DISTCLEANFILES = \
