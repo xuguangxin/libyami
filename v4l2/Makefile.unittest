@@ -1,0 +1,41 @@
+noinst_PROGRAMS = unittest
+
+unittest_SOURCES = \
+	unittest_main.cpp \
+	$(NULL)
+
+unittest_SOURCES += V4L2Decoder_unittest.cpp
+
+unittest_LDFLAGS = \
+	$(GTEST_LDFLAGS) \
+	$(AM_LDFLAGS) \
+	$(LIBYAMI_LT_LDFLAGS) \
+	$(LIBYAMIV4L2_LT_LDFLAGS) \
+	$(NULL)
+
+unittest_LDADD = \
+	libyamiv4l2.la \
+	$(top_builddir)/decoder/libyami_decoder.la \
+	$(top_builddir)/encoder/libyami_encoder.la \
+	$(top_builddir)/codecparsers/libyami_codecparser.la \
+	$(top_builddir)/vpp/libyami_vpp.la \
+	$(top_builddir)/vaapi/libyami_vaapi.la \
+	$(top_builddir)/common/libyami_common.la \
+	$(GTEST_LIBS) \
+	$(NULL)
+
+unittest_CPPFLAGS = \
+	$(GTEST_CPPFLAGS) \
+	$(LIBVA_CFLAGS) \
+	$(LIBV4L2_CFLAGS) \
+	-I$(top_srcdir)/interface \
+	$(NULL)
+
+unittest_CXXFLAGS = \
+	$(GTEST_CXXFLAGS) \
+	$(AM_CXXFLAGS) \
+	$(NULL)
+
+check-local: unittest
+	$(builddir)/unittest
+
