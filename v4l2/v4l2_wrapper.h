@@ -16,11 +16,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#if ANDROID
-#else
-    #if __ENABLE_X11__
-    #include <X11/Xlib.h>
-    #endif
+#if __ENABLE_X11__
+#include <X11/Xlib.h>
 #endif
 #include "VideoCommonDefs.h"
 
@@ -43,8 +40,7 @@ int32_t YamiV4L2_ClearDevicePollInterrupt(int32_t fd);
 void* YamiV4L2_Mmap(void* addr, size_t length,
                      int prot, int flags, int fd, unsigned int offset);
 int32_t YamiV4L2_Munmap(void* addr, size_t length);
-#if ANDROID
-#elif __ENABLE_WAYLAND__
+#if __ENABLE_WAYLAND__
 int32_t YamiV4L2_SetWaylandDisplay(int32_t fd, struct wl_display* wlDisplay);
 #else
     #if __ENABLE_X11__
