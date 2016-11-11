@@ -567,14 +567,6 @@ struct FormatEntry {
     const char* mime;
 };
 
-#ifndef V4L2_PIX_FMT_VP9
-#define V4L2_PIX_FMT_VP9 YAMI_FOURCC('V', 'P', '9', '0')
-#endif
-
-#ifndef V4L2_PIX_FMT_VC1
-#define V4L2_PIX_FMT_VC1 YAMI_FOURCC('V', 'C', '1', '0')
-#endif
-
 static const FormatEntry FormatEntrys[] = {
     {V4L2_PIX_FMT_H264, YAMI_MIME_H264},
     {V4L2_PIX_FMT_VP8, YAMI_MIME_VP8},

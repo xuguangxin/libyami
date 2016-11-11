@@ -20,6 +20,9 @@
 
 #include "v4l2_codecbase.h"
 #include "VideoDecoderInterface.h"
+#include "common/Thread.h"
+#include "common/Functional.h"
+#include <BufferPipe.h>
 
 #if __ENABLE_EGL__
 namespace YamiMediaCodec {
@@ -29,6 +32,7 @@ namespace YamiMediaCodec {
 
 using namespace YamiMediaCodec;
 typedef SharedPtr < IVideoDecoder > DecoderPtr;
+typedef std::function<int32_t(void)> Task;
 class V4l2Decoder : public V4l2CodecBase
 {
   public:
@@ -41,6 +45,20 @@ class V4l2Decoder : public V4l2CodecBase
 #if __ENABLE_EGL__
     virtual int32_t useEglImage(EGLDisplay eglDisplay, EGLContext eglContext, uint32_t buffer_index, void* egl_image);
 #endif
+
+    class Output {
+    public:
+        Output(V4l2Decoder* decoder);
+        virtual int32_t requestBuffers(uint32_t count) = 0;
+        virtual void output(SharedPtr<VideoFrame>& frame) = 0;
+        virtual bool isAlloccationDone() = 0;
+        virtual bool isSurfaceReady() = 0;
+        virtual int32_t deque(struct v4l2_buffer* buf) =  0;
+
+    protected:
+        V4l2Decoder* m_decoder;
+    };
+    friend class EglOutput;
 
   protected:
     virtual bool start();
@@ -55,6 +73,71 @@ class V4l2Decoder : public V4l2CodecBase
     virtual void flush();
 
   private:
+      int32_t onQueueBuffer(v4l2_buffer*);
+      int32_t onDequeBuffer(v4l2_buffer*);
+      int32_t onStreamOn(uint32_t type);
+      int32_t onStreamOff(uint32_t type);
+      int32_t onRequestBuffers(const v4l2_requestbuffers*);
+      int32_t onSetFormat(v4l2_format*);
+      int32_t onQueryBuffer(v4l2_buffer*);
+      int32_t onSubscribeEvent(v4l2_event_subscription*);
+      int32_t onDequeEvent(v4l2_event*);
+      int32_t onGetFormat(v4l2_format*);
+      int32_t onGetCtrl(v4l2_control*);
+      int32_t onEnumFormat(v4l2_fmtdesc*);
+      int32_t onGetCrop(v4l2_crop*);
+
+      //jobs send to decoder thread
+      void startDecoderJob();
+      void getInputJob();
+      void inputReadyJob();
+      void getSurfaceJob();
+      void outputReadyJob();
+      void allocationDoneJob();
+      void flushDecoderJob();
+
+
+
+      //tasks send to decoder thread
+      int32_t getFormatTask(v4l2_format*);
+      int32_t getCtrlTask(v4l2_control*);
+
+      //help functions
+      int32_t sendTask(Task task);
+      void post(Job job);
+      VideoDecodeBuffer* peekInput();
+      void consumeInput();
+      bool needReallocation(const VideoFormatInfo*);
+
+
+      bool m_inputOn;
+      v4l2_format m_inputFormat;
+      std::vector<VideoDecodeBuffer> m_inputFrames;
+      std::vector<uint8_t> m_inputSpace;
+      BufferPipe<uint32_t> m_in;
+
+      bool m_outputOn;
+      v4l2_format m_outputFormat;
+
+      //decoder thread
+      Thread m_thread;
+
+      enum State {
+          kUnStarted, //decoder thread is not started.
+          kWaitAllocation, //wait buffer allocation
+          kGetInput,
+          kWaitInput,
+          kGetSurface, // try get surface for decoder
+          kWaitSurface, // wait for input
+          kFormatChanged, // detected format change. Waiting new surfacee.
+          kStopped, // stopped by use
+          kError, // have a error
+      };
+      State m_state;
+      SharedPtr<Output> m_output;
+      BufferPipe<uint32_t> m_out;
+      VideoFormatInfo m_lastFormat;
+
 #if __ENABLE_WAYLAND__
     SharedPtr<VideoFrame> createVaSurface(uint32_t width, uint32_t height);
     bool mapVideoFrames(uint32_t width, uint32_t height);
@@ -62,30 +145,8 @@ class V4l2Decoder : public V4l2CodecBase
     std::vector<SharedPtr<VideoFrame> > m_videoFrames;
 #endif
     DisplayPtr m_display;
-    SharedPtr<IVideoPostProcess> m_vpp;
     DecoderPtr m_decoder;
     std::vector<uint8_t> m_codecData;
-    bool m_bindEglImage;
-    // VideoFormatInfo m_videoFormatInfo;
-    // chrome requires m_maxBufferCount[OUTPUT] to be big enough (dpb size + some extra ones), it is correct when we export YUV buffer direcly
-    // however, we convert YUV frame to temporary RGBX frame; so the RGBX frame pool is not necessary to be that big.
-    uint32_t m_actualOutBufferCount;
-
-    uint32_t m_maxBufferSize[2];
-    uint8_t *m_bufferSpace[2];
-
-    std::vector<VideoDecodeBuffer> m_inputFrames;
-    std::vector<VideoFrameRawData> m_outputRawFrames;
-
-    uint32_t m_videoWidth;
-    uint32_t m_videoHeight;
-    uint32_t m_outputBufferCountOnInit;
-
-
-    // debug
-    uint32_t m_outputBufferCountQBuf;
-    uint32_t m_outputBufferCountPulse;
-    uint32_t m_outputBufferCountGive;
 #if __ENABLE_EGL__
     std::vector <SharedPtr<EglVaapiImage> > m_eglVaapiImages;
 #endif
