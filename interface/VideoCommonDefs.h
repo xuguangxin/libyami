@@ -144,7 +144,6 @@ typedef enum {
     /* encoder fatal */
 
     /* decoder fatal */
-    YAMI_DECODE_NO_SURFACE,
     YAMI_DECODE_PARSER_FAIL,
 
     /* common fatal */
@@ -166,6 +165,7 @@ typedef enum {
     /* decoder no fatal */
     YAMI_DECODE_INVALID_DATA,
     YAMI_DECODE_FORMAT_CHANGE,
+    YAMI_DECODE_NO_SURFACE,
 
     /* encoder no fatal */
     YAMI_ENCODE_BUFFER_TOO_SMALL, // The buffer passed to encode is too small to contain encoded data
