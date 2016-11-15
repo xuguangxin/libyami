@@ -1039,13 +1039,13 @@ SurfacePtr VaapiDecoderH265::createSurface(const SliceHeader* const slice)
     return s;
 }
 
-PicturePtr VaapiDecoderH265::createPicture(const SliceHeader* const slice,
-        const NalUnit* const nalu)
+YamiStatus VaapiDecoderH265::createPicture(PicturePtr& picture, const SliceHeader* const slice,
+    const NalUnit* const nalu)
 {
-    PicturePtr picture;
+
     SurfacePtr surface = createSurface(slice);
     if (!surface)
-        return picture;
+        return YAMI_DECODE_NO_SURFACE;
     picture.reset(new VaapiDecPictureH265(m_context, surface, m_currentPTS));
 
     picture->m_noRaslOutputFlag = isIdr(nalu) || isBla(nalu) ||
@@ -1058,7 +1058,7 @@ PicturePtr VaapiDecoderH265::createPicture(const SliceHeader* const slice,
 
     getPoc(picture, slice, nalu);
 
-    return picture;
+    return YAMI_SUCCESS;
 }
 
 YamiStatus VaapiDecoderH265::decodeSlice(NalUnit* nalu)
@@ -1078,7 +1078,9 @@ YamiStatus VaapiDecoderH265::decodeSlice(NalUnit* nalu)
         status = decodeCurrent();
         if (status != YAMI_SUCCESS)
             return status;
-        m_current = createPicture(slice, nalu);
+        status = createPicture(m_current, slice, nalu);
+        if (status != YAMI_SUCCESS)
+            return status;
         if (m_noRaslOutputFlag && isRasl(nalu))
             return YAMI_SUCCESS;
         if (!m_current || !m_dpb.init(m_current, slice, nalu, m_newStream))
