@@ -27,19 +27,19 @@
 
 namespace YamiMediaCodec{
 
-YamiStatus VaapiDecSurfacePool::getSurface(void* pool, intptr_t* surface, uint32_t flags)
+YamiStatus VaapiDecSurfacePool::getSurface(SurfaceAllocParams* param, intptr_t* surface)
 {
-    VaapiDecSurfacePool* p = (VaapiDecSurfacePool*)pool;
-    return p->getSurface(surface, flags);
+    VaapiDecSurfacePool* p = (VaapiDecSurfacePool*)param->user;
+    return p->getSurface(surface);
 }
 
-YamiStatus VaapiDecSurfacePool::putSurface(void* pool, intptr_t surface)
+YamiStatus VaapiDecSurfacePool::putSurface(SurfaceAllocParams* param, intptr_t surface)
 {
-    VaapiDecSurfacePool* p = (VaapiDecSurfacePool*)pool;
+    VaapiDecSurfacePool* p = (VaapiDecSurfacePool*)param->user;
     return p->putSurface(surface);
 }
 
-YamiStatus VaapiDecSurfacePool::getSurface(intptr_t* surface, uint32_t /*flags*/)
+YamiStatus VaapiDecSurfacePool::getSurface(intptr_t* surface)
 {
     if (m_freed.empty())
         return YAMI_DECODE_NO_SURFACE;
@@ -86,6 +86,11 @@ bool VaapiDecSurfacePool::init(VideoConfigBuffer* config,
     uint32_t width = m_allocParams.width;
     uint32_t height = m_allocParams.height;
     uint32_t fourcc = config->fourcc;
+    if (!m_allocParams.getSurface || !m_allocParams.putSurface) {
+        m_allocParams.getSurface = getSurface;
+        m_allocParams.putSurface = putSurface;
+        m_allocParams.user = this;
+    }
 
     for (uint32_t i = 0; i < size; i++) {
         intptr_t s = m_allocParams.surfaces[i];
@@ -127,7 +132,8 @@ struct VaapiDecSurfacePool::SurfaceRecycler
     SurfaceRecycler(const DecSurfacePoolPtr& pool): m_pool(pool) {}
     void operator()(VaapiSurface* surface)
     {
-        putSurface(m_pool.get(), (intptr_t)surface->getID());
+        SurfaceAllocParams& params = m_pool->m_allocParams;
+        params.putSurface(&params, (intptr_t)surface->getID());
     }
 
 private:
@@ -139,7 +145,7 @@ SurfacePtr VaapiDecSurfacePool::acquire()
     SurfacePtr surface;
     AutoLock lock(m_lock);
     intptr_t p;
-    YamiStatus status = getSurface(this, &p, 0);
+    YamiStatus status = m_allocParams.getSurface(&m_allocParams, &p);
     if (status != YAMI_SUCCESS)
         return surface;
     SurfaceMap::iterator it = m_surfaceMap.find(p);

@@ -38,6 +38,7 @@ friend void       details::unrefAllocator (SurfaceAllocator* thiz);
 public:
     BaseSurfaceAllocator()
     {
+        memset(this, 0, sizeof(SurfaceAllocator));
         //hook function and data
         alloc = details::allocatSurfaces;
         free =  details::freeSurfaces;
