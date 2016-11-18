@@ -275,7 +275,7 @@ bool v4l2codecOperationInit(V4l2CodecOps *opFuncs)
     V4L2_DLSYM_OR_RETURN_ON_ERROR(Mmap);
     V4L2_DLSYM_OR_RETURN_ON_ERROR(Munmap);
     V4L2_DLSYM_OR_RETURN_ON_ERROR(SetParameter);
-#if __ENABLE_EGL_
+#if __ENABLE_EGL__
     V4L2_DLSYM_OR_RETURN_ON_ERROR(UseEglImage);
 #endif
 #undef V4L2_DLSYM_OR_RETURN_ON_ERROR
