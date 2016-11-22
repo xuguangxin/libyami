@@ -114,13 +114,14 @@ typedef struct NativeDisplay{
 } NativeDisplay;
 
 typedef enum {
-    VIDEO_DATA_MEMORY_TYPE_RAW_POINTER,  // pass data pointer to client
-    VIDEO_DATA_MEMORY_TYPE_RAW_COPY,     // copy data to client provided buffer, renderDone() is not necessary
-    VIDEO_DATA_MEMORY_TYPE_DRM_NAME,     // render output frame by egl/gles, connect with OpenCL
-    VIDEO_DATA_MEMORY_TYPE_DMA_BUF,      // share buffer with camera device etc
-    VIDEO_DATA_MEMORY_TYPE_SURFACE_ID,  // it can be used for surface sharing of transcoding, benefits suppressed rendering as well.
-                                        //it is discouraged to use it for video rendering.
+    VIDEO_DATA_MEMORY_TYPE_RAW_POINTER, // pass data pointer to client
+    VIDEO_DATA_MEMORY_TYPE_RAW_COPY, // copy data to client provided buffer, renderDone() is not necessary
+    VIDEO_DATA_MEMORY_TYPE_DRM_NAME, // render output frame by egl/gles, connect with OpenCL
+    VIDEO_DATA_MEMORY_TYPE_DMA_BUF, // share buffer with camera device etc
+    VIDEO_DATA_MEMORY_TYPE_SURFACE_ID, // it can be used for surface sharing of transcoding, benefits suppressed rendering as well.
+    //it is discouraged to use it for video rendering.
     VIDEO_DATA_MEMORY_TYPE_ANDROID_BUFFER_HANDLE, // buffer_handle_t for android
+    VIDEO_DATA_MEMORY_TYPE_EXTERNAL_DMA_BUF, //external dma buffer, the buffer is allocate by user
 } VideoDataMemoryType;
 
 typedef struct VideoFrameRawData{
