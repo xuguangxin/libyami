@@ -58,6 +58,11 @@ VaapiDecoderBase::~VaapiDecoderBase()
 
 YamiStatus VaapiDecoderBase::createPicture(PicturePtr& picture, int64_t timeStamp /* , VaapiPictureStructure structure = VAAPI_PICTURE_STRUCTURE_FRAME */)
 {
+    /*If we can't create context, this means driver do not support this decoder*/
+    if (!m_context) {
+        ERROR("no decode context");
+        return YAMI_UNSUPPORTED;
+    }
     /*accquire one surface from m_surfacePool in base decoder  */
     SurfacePtr surface = createSurface();
     if (!surface) {

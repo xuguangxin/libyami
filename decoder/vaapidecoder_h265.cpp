@@ -1042,6 +1042,10 @@ SurfacePtr VaapiDecoderH265::createSurface(const SliceHeader* const slice)
 YamiStatus VaapiDecoderH265::createPicture(PicturePtr& picture, const SliceHeader* const slice,
     const NalUnit* const nalu)
 {
+    if (!m_context) {
+        ERROR("no decode context");
+        return YAMI_UNSUPPORTED;
+    }
 
     SurfacePtr surface = createSurface(slice);
     if (!surface)
