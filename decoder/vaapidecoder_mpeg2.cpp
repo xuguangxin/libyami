@@ -616,6 +616,10 @@ inline bool findTempReference(const PicturePtr& picture,
 
 YamiStatus VaapiDecoderMPEG2::assignSurface()
 {
+    if (!m_context) {
+        ERROR("no decode context");
+        return YAMI_UNSUPPORTED;
+    }
     SurfacePtr surface;
     YamiStatus status = YAMI_SUCCESS;
 

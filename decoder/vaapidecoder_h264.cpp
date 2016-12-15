@@ -68,7 +68,12 @@ public:
 
     PicturePtr allocPicture()
     {
-        PicturePtr picture(
+        PicturePtr picture;
+        if (!m_context) {
+            ERROR("no decode context");
+            return picture;
+        }
+        picture.reset(
             new VaapiDecPictureH264(m_context, m_surface, m_timeStamp));
         assert(picture);
         return picture;
@@ -1640,6 +1645,10 @@ SurfacePtr VaapiDecoderH264::createSurface(const SliceHeader* const slice)
 YamiStatus VaapiDecoderH264::createPicture(const SliceHeader* const slice,
     const NalUnit* const nalu)
 {
+    if (!m_context) {
+        ERROR("no decode context");
+        return YAMI_UNSUPPORTED;
+    }
     YamiStatus status = YAMI_SUCCESS;
     VaapiPictureType picStructure;
     bool isSecondField = false;
