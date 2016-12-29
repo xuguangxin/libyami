@@ -69,37 +69,9 @@ private:
 void VaapiDecoderMPEG2::DPB::flush()
 {
     DEBUG("MPEG2-DPB flush");
+    if (!m_referencePictures.empty())
+        callOutputPicture(m_referencePictures.back());
     m_referencePictures.clear();
-}
-
-YamiStatus
-VaapiDecoderMPEG2::DPB::outputPreviousPictures(const PicturePtr& picture, bool empty)
-{
-    YamiStatus status = YAMI_SUCCESS;
-    std::list<PicturePtr>::iterator it = m_referencePictures.begin();
-
-    if (picture->m_pictureCodingType_ == YamiParser::MPEG2::kIFrame)
-        empty = true;
-
-    // send to the output all possible pictures
-    for (; it != m_referencePictures.end(); it++) {
-        DEBUG("candidate picture temporalReference %d",
-              picture->m_temporalReference_);
-
-        if ((picture->m_temporalReference_ >= (*it)->m_temporalReference_
-             || empty)
-            && (*it)->m_sentToOutput_ == false) {
-
-            status = callOutputPicture((*it));
-            if (status != YAMI_SUCCESS)
-                return status;
-
-            (*it)->m_sentToOutput_ = true;
-            DEBUG("output temporalReference %d", (*it)->m_temporalReference_);
-        }
-    }
-
-    return status;
 }
 
 YamiStatus
@@ -114,20 +86,20 @@ VaapiDecoderMPEG2::DPB::insertPictureToReferences(const PicturePtr& picture)
               picture->m_temporalReference_);
 
         if (m_referencePictures.size() == 2) {
-            outputPicture = m_referencePictures.front();
-            DEBUG("Drop picture %d from reference queue",
-                  outputPicture->m_temporalReference_);
             m_referencePictures.pop_front();
         }
+
         m_referencePictures.push_back(picture);
+
+        if (m_referencePictures.size() == 2) {
+            callOutputPicture(m_referencePictures.front());
+        }
     } else {
         // this is a kBFrame
         // send it to output right away
         DEBUG("Send B frame picture to the output %d",
               picture->m_temporalReference_);
         status = callOutputPicture(picture);
-        if (status != YAMI_SUCCESS)
-            return status;
     }
     return status;
 }
@@ -143,33 +115,10 @@ YamiStatus VaapiDecoderMPEG2::DPB::insertPicture(const PicturePtr& picture)
     DEBUG("topFieldFirst %d", picture->m_topFieldFirst_);
     DEBUG("progressiveFrame %d", picture->m_progressiveFrame_);
 
-    status = outputPreviousPictures(picture);
-    if (status != YAMI_SUCCESS)
-        return status;
-
     if (picture->m_progressiveFrame_
-        || picture->m_VAPictureStructure_ == VAAPI_PICTURE_FRAME) {
-
-        INFO("Insert one frame picture");
-        // frame picture can be inserted straight to DPB as it was decoded
-        // completely before trying to insert, it can also be
-        // output if temporalReference matches PTS
-
+        || picture->m_VAPictureStructure_ == VAAPI_PICTURE_FRAME
+        || !picture->m_isFirstField_) {
         status = insertPictureToReferences(picture);
-        if (status != YAMI_SUCCESS)
-            return status;
-
-    } else if (!picture->m_progressiveFrame_
-               && picture->m_VAPictureStructure_
-                  != VAAPI_PICTURE_FRAME) {
-        // field pictures received, top field and bottom field have their lists
-        // based on those a decision will be made if frame can be displayed
-        INFO("This is a field picture");
-        if (!picture->m_isFirstField_) {
-            status = insertPictureToReferences(picture);
-            if (status != YAMI_SUCCESS)
-                return status;
-        }
     }
 
     DEBUG("insertPicture returns dpb size %lu", m_referencePictures.size());
@@ -462,10 +411,7 @@ YamiStatus VaapiDecoderMPEG2::processDecodeBuffer()
             if (status != YAMI_SUCCESS) {
                 return status;
             }
-            status = m_DPB.outputPreviousPictures(m_currentPicture, true);
-            if (status != YAMI_SUCCESS) {
-                return status;
-            }
+            m_DPB.flush();
             m_isParsingSlices = false;
         }
         break;
@@ -851,6 +797,7 @@ YamiStatus VaapiDecoderMPEG2::decodePicture()
     }
     // put full picture into the dpb
     status = m_DPB.insertPicture(m_currentPicture);
+    m_currentPicture.reset();
     if (status != YAMI_SUCCESS) {
         ERROR("insertPicture to DPB failed");
     }
