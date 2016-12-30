@@ -116,11 +116,14 @@ private:
     YamiStatus checkLevel(const YamiParser::MPEG2::LevelType& level);
     bool isSliceCode(YamiParser::MPEG2::StartCodeType next_code);
 
-    YamiStatus processConfigBuffer();
-    YamiStatus processDecodeBuffer();
+    YamiStatus decodeSequenceHeader(const StreamHdrPtr& stream);
+    YamiStatus decodeGOPHeader(const StreamHdrPtr& stream);
+    YamiStatus decodePictureHeader(const StreamHdrPtr& stream);
+    YamiStatus decodeSequenceEnd(const StreamHdrPtr& stream);
+    YamiStatus decodeExtension(const StreamHdrPtr& stream);
+    YamiStatus decodeSlice(const StreamHdrPtr& stream);
 
     YamiStatus preDecode(StreamHdrPtr shdr);
-    YamiStatus processSlice();
     YamiStatus decodeGOP();
     YamiStatus assignSurface();
     YamiStatus assignPicture();
@@ -150,6 +153,7 @@ private:
     bool m_canCreatePicture;
     PicturePtr m_currentPicture;
     YamiParser::MPEG2::StartCodeType m_previousStartCode;
+    YamiParser::MPEG2::ExtensionIdentifierType m_previousExtensionID;
     YamiParser::MPEG2::StartCodeType m_nextStartCode;
     IQMatricesRefs m_IQMatrices;
     VAProfile m_VAProfile;
