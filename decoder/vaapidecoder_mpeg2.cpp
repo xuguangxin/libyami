@@ -255,20 +255,18 @@ YamiStatus VaapiDecoderMPEG2::fillConfigBuffer()
 
 YamiStatus VaapiDecoderMPEG2::decodeSequenceHeader(const StreamHdrPtr& stream)
 {
-    YamiStatus status = decodePicture();
     if (!m_parser->parseSequenceHeader(stream.get()))
-        status = YAMI_DECODE_INVALID_DATA;
+        return YAMI_DECODE_INVALID_DATA;
     m_sequenceHeader = m_parser->getSequenceHeader();
-    return status;
+    return YAMI_SUCCESS;
 }
 
 YamiStatus VaapiDecoderMPEG2::decodeGOPHeader(const StreamHdrPtr& stream)
 {
-    YamiStatus status = decodePicture();
     if (!m_parser->parseGOPHeader(stream.get()))
         return YAMI_DECODE_INVALID_DATA;
     m_GOPHeader = m_parser->getGOPHeader();
-    return status;
+    return YAMI_SUCCESS;
 }
 
 YamiStatus VaapiDecoderMPEG2::decodePictureHeader(const StreamHdrPtr& stream)
@@ -276,14 +274,11 @@ YamiStatus VaapiDecoderMPEG2::decodePictureHeader(const StreamHdrPtr& stream)
     if (!m_parser->parsePictureHeader(stream.get()))
         return YAMI_DECODE_INVALID_DATA;
     m_pictureHeader = m_parser->getPictureHeader();
-    return createPicture();
+    return YAMI_SUCCESS;
 }
 
 YamiStatus VaapiDecoderMPEG2::decodeSequenceEnd(const StreamHdrPtr& stream)
 {
-    YamiStatus status = decodePicture();
-    if (status != YAMI_SUCCESS)
-        return status;
     if (!m_parser->parseGOPHeader(stream.get()))
         return YAMI_DECODE_INVALID_DATA;
     m_DPB.flush();
@@ -307,6 +302,7 @@ YamiStatus VaapiDecoderMPEG2::decodeExtension(const StreamHdrPtr& stream)
             if (!m_parser->parsePictureCodingExtension(stream.get()))
                 return YAMI_DECODE_INVALID_DATA;
             m_pictureCodingExtension = m_parser->getPictureCodingExtension();
+            return createPicture();
         }
     } else if (m_previousStartCode
         == YamiParser::MPEG2::MPEG2_EXTENSION_START_CODE) {
