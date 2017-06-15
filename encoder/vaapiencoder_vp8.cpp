@@ -33,6 +33,7 @@ namespace YamiMediaCodec{
 //golden, alter, last
 #define MAX_REFERECNE_FRAME 3
 #define VP8_DEFAULT_QP     40
+#define VP8_MAX_TEMPORAL_LAYER_NUM 3
 
 class VaapiEncPictureVP8 : public VaapiEncPicture
 {
@@ -96,6 +97,219 @@ void Vp8EncoderNormal::getRefFlags(RefFlags& refFlags, uint8_t temporalLayer) co
     refFlags.copy_buffer_to_alternate = 2;
 
 }
+class Vp8EncoderSvct : public Vp8Encoder {
+public:
+    Vp8EncoderSvct(const VideoParamsCommon& common);
+
+    void getRefFlags(RefFlags&, uint8_t temporalLayer) const;
+    void getLayerIds(std::vector<uint32_t>& ids) const;
+
+    bool getErrorResilient() const { return true; }
+    bool getRefreshEntropyProbs() const { return false; }
+    uint8_t getTemporalLayer(uint32_t frameNum) const { return m_tempLayerIDs[frameNum % m_periodicity]; }
+
+private:
+    void printRatio();
+    void printLayerIDs();
+
+    bool calculateFramerateRatio();
+    bool calculatePeriodicity();
+    bool calculateLayerIDs();
+    uint32_t calculateGCD(uint32_t* gcdArray, uint32_t num);
+
+    VideoFrameRate m_framerates[VP8_MAX_TEMPORAL_LAYER_NUM];
+    uint32_t m_framerateRatio[VP8_MAX_TEMPORAL_LAYER_NUM];
+    uint32_t m_layerBitRate[VP8_MAX_TEMPORAL_LAYER_NUM];
+    uint32_t m_periodicity;
+    std::vector<uint32_t> m_tempLayerIDs;
+    uint8_t m_layerNum;
+};
+
+
+
+Vp8EncoderSvct::Vp8EncoderSvct(const VideoParamsCommon& common)
+{
+    uint32_t gcd;
+    uint32_t i;
+    uint32_t layers = common.temporalLayers.numLayers;
+    assert(layers > 0 && layers < VP8_MAX_TEMPORAL_LAYER_NUM);
+    m_layerNum = layers + 1;
+    memset(m_layerBitRate, 0, sizeof(m_layerBitRate));
+    memset(m_framerateRatio, 0, sizeof(m_framerateRatio));
+    m_layerBitRate[0] = common.rcParams.bitRate;
+    m_framerates[0] = common.frameRate;
+    for (i = 1; i < m_layerNum; i++) {
+        m_framerates[i] = common.temporalLayers.frameRate[i - 1];
+        m_layerBitRate[i] = common.temporalLayers.bitRate[i - 1];
+    }
+    for (i = 0; i < m_layerNum; i++) {
+        gcd = std::__gcd(m_framerates[i].frameRateNum, m_framerates[i].frameRateDenom);
+        m_framerates[i].frameRateNum /= gcd;
+        m_framerates[i].frameRateDenom /= gcd;
+    }
+
+    calculatePeriodicity();
+    calculateLayerIDs();
+    printRatio();
+    printLayerIDs();
+}
+
+void Vp8EncoderSvct::getLayerIds(std::vector<uint32_t>& ids) const
+{
+    ids = m_tempLayerIDs;
+}
+
+void Vp8EncoderSvct::getRefFlags(RefFlags& refFlags, uint8_t temporalLayer) const
+{
+    switch (temporalLayer) {
+    case 2:
+        refFlags.refresh_alternate_frame = 1;
+        break;
+    case 1:
+        refFlags.refresh_golden_frame = 1;
+        refFlags.no_ref_arf = 1;
+        break;
+    case 0:
+        refFlags.refresh_last = 1;
+        refFlags.no_ref_gf = 1;
+        refFlags.no_ref_arf = 1;
+        break;
+    default:
+        ERROR("temporal layer %d is out of the range[0, 2].", temporalLayer);
+        break;
+    }
+}
+
+bool Vp8EncoderSvct::calculateFramerateRatio()
+{
+    int32_t numerator;
+    //Reduct fractions to a common denominator, then get the numerators
+    //into m_framerateRatio.
+    for (uint8_t i = 0; i < m_layerNum; i++) {
+        numerator = 1;
+        for (uint8_t j = 0; j < m_layerNum; j++)
+            if (j != i)
+                numerator *= m_framerates[j].frameRateDenom;
+            else
+                numerator *= m_framerates[j].frameRateNum;
+        m_framerateRatio[i] = numerator;
+    }
+
+    //Divide m_framerateRatio by Greatest Common Divisor.
+    uint32_t gcd = calculateGCD(m_framerateRatio, m_layerNum);
+    if ((gcd != 0) && (gcd != 1))
+        for (uint8_t i = 0; i < m_layerNum; i++)
+            m_framerateRatio[i] /= gcd;
+
+    return true;
+}
+
+bool Vp8EncoderSvct::calculatePeriodicity()
+{
+    if (!m_framerateRatio[0])
+        calculateFramerateRatio();
+
+    m_periodicity = m_framerateRatio[m_layerNum - 1];
+
+    return true;
+}
+bool Vp8EncoderSvct::calculateLayerIDs()
+{
+    uint32_t layer = 0;
+    uint32_t m_frameNum[VP8_MAX_TEMPORAL_LAYER_NUM];
+    uint32_t m_frameNumAssigned[VP8_MAX_TEMPORAL_LAYER_NUM];
+
+    memset(m_frameNumAssigned, 0, sizeof(m_frameNumAssigned));
+    m_frameNum[0] = m_framerateRatio[0];
+    for (uint32_t i = 1; i < m_layerNum; i++)
+        m_frameNum[i] = m_framerateRatio[i] - m_framerateRatio[i - 1];
+
+    for (uint32_t i = 0; i < m_periodicity; i++)
+        for (layer = 0; layer < m_layerNum; layer++)
+            if (!(i % (m_periodicity / m_framerateRatio[layer])))
+                if (m_frameNumAssigned[layer] < m_frameNum[layer]) {
+                    m_tempLayerIDs.push_back(layer);
+                    m_frameNumAssigned[layer]++;
+                    break;
+                }
+
+    return true;
+}
+
+//GCD: Greatest Common Divisor;
+//return:
+//     0: failure;
+//  else: successful;
+uint32_t Vp8EncoderSvct::calculateGCD(uint32_t* gcdArray, uint32_t num)
+{
+    if (!gcdArray || !num)
+        return 0;
+    std::vector<uint32_t> gcdVector;
+    uint32_t gcdNotTheSame = 0;
+    uint32_t min = 0;
+
+    //copy gcdArray, and find out the min of gcdArray.
+    gcdVector.push_back(gcdArray[0]);
+    min = gcdVector[0];
+    for (uint8_t i = 1; i < num; i++) {
+        gcdVector.push_back(gcdArray[i]);
+        if (min > gcdVector[i])
+            min = gcdVector[i];
+    }
+    //if gcdArray contains 0, would fail;
+    if (!min)
+        return min;
+
+    //if the GCDs(greatest common divisor) of min and each element in gcdVector
+    //are the same, we get the GCD.
+    while (min != 1) {
+        gcdNotTheSame = 0;
+        for (uint8_t i = 0; i < num; i++) {
+            //calculate the GCD of min and gcdVector[i], and refresh gcdTemp[i]
+            //with the new GCD.
+            gcdVector[i] = std::__gcd(min, gcdVector[i]);
+            if (i > 1)
+                if (gcdVector[i] != gcdVector[i - 1])
+                    gcdNotTheSame = 1;
+            if (min > gcdVector[i])
+                min = gcdVector[i];
+        }
+        if (!gcdNotTheSame)
+            break;
+    }
+
+    return min;
+}
+
+void Vp8EncoderSvct::printRatio()
+{
+    DEBUG("ratio: \n");
+    for (uint8_t i = 0; i < m_layerNum; i++) {
+        if (i != 0)
+            DEBUG(" : ");
+        DEBUG("%d", m_framerateRatio[i]);
+    }
+    DEBUG("\n");
+
+    return;
+}
+
+void Vp8EncoderSvct::printLayerIDs()
+{
+    DEBUG("LayerIDs: \n");
+    DEBUG(" frame number: ");
+    for (uint8_t i = 0; i < m_periodicity; i++) {
+        DEBUG("%2d ", i);
+    }
+    DEBUG("\n");
+    DEBUG("frame layerid: ");
+    for (uint8_t i = 0; i < m_periodicity; i++) {
+        DEBUG("%2d ", m_tempLayerIDs[i]);
+    }
+    DEBUG("\n");
+
+    return;
+}
 VaapiEncoderVP8::VaapiEncoderVP8():
 	m_frameCount(0),
 	m_qIndex(VP8_DEFAULT_QP)
@@ -128,7 +342,11 @@ void VaapiEncoderVP8::resetParams()
     m_maxCodedbufSize = width() * height() * 3 / 2 + VP8_HEADER_MAX_SIZE;
     if (ipPeriod() == 0)
         m_videoParamCommon.intraPeriod = 1;
-    m_encoder.reset(new Vp8EncoderNormal());
+    if (m_videoParamCommon.temporalLayers.numLayers > 0) {
+        m_encoder.reset(new Vp8EncoderSvct(m_videoParamCommon));
+    } else {
+        m_encoder.reset(new Vp8EncoderNormal());
+    }
 }
 
 YamiStatus VaapiEncoderVP8::start()
@@ -192,6 +410,7 @@ YamiStatus VaapiEncoderVP8::doEncode(const SurfacePtr& surface, uint64_t timeSta
     else
         picture->m_type = VAAPI_PICTURE_P;
 
+    picture->m_temporalID = m_encoder->getTemporalLayer(m_frameCount % keyFramePeriod());
     m_frameCount++;
 
     m_qIndex = (initQP() > minQP() && initQP() < maxQP()) ? initQP() : VP8_DEFAULT_QP;
@@ -246,7 +465,7 @@ bool VaapiEncoderVP8::fill(VAEncPictureParameterBufferVP8* picParam, const Pictu
         picParam->ref_gf_frame = m_golden->getID();
         picParam->ref_last_frame = m_last->getID();
 
-        m_encoder->getRefFlags(refFlags, 0);
+        m_encoder->getRefFlags(refFlags, picture->m_temporalID);
         fill(picParam, refFlags);
     } else {
         picParam->ref_last_frame = VA_INVALID_SURFACE;
@@ -255,6 +474,7 @@ bool VaapiEncoderVP8::fill(VAEncPictureParameterBufferVP8* picParam, const Pictu
     }
 
     picParam->coded_buf = picture->getCodedBufferID();
+    picParam->ref_flags.bits.temporal_id = picture->m_temporalID;
 
     picParam->pic_flags.bits.show_frame = 1;
     /*TODO: multi partition*/
@@ -360,6 +580,32 @@ bool VaapiEncoderVP8::referenceListUpdate (const PicturePtr& pic, const SurfaceP
             refFlags.refresh_alternate_frame, refFlags.copy_buffer_to_alternate);
         if (refFlags.refresh_last)
             m_last = recon;
+    }
+    return true;
+}
+/* Generates additional control parameters */
+bool VaapiEncoderVP8::ensureMiscParams(VaapiEncPicture* picture)
+{
+    if (!VaapiEncoderBase::ensureMiscParams(picture))
+        return false;
+
+    VideoRateControl mode = rateControlMode();
+    if (mode == RATE_CONTROL_CBR || mode == RATE_CONTROL_VBR) {
+        if (m_videoParamCommon.temporalLayers.numLayers > 0) {
+            VAEncMiscParameterTemporalLayerStructure* layerParam = NULL;
+            if (!picture->newMisc(VAEncMiscParameterTypeTemporalLayerStructure,
+                    layerParam))
+                return false;
+
+            std::vector<uint32_t> ids;
+            m_encoder->getLayerIds(ids);
+            if (layerParam) {
+                layerParam->number_of_layers = m_videoParamCommon.temporalLayers.numLayers + 1;
+                layerParam->periodicity = ids.size();
+                std::copy(ids.begin(), ids.end(), layerParam->layer_id);
+            }
+
+        }
     }
     return true;
 }
