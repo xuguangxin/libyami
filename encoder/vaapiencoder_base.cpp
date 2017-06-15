@@ -449,9 +449,13 @@ void VaapiEncoderBase::fill(VAEncMiscParameterHRD* hrd) const
         m_videoParamCommon.rcParams.bitRate, hrd->buffer_size,hrd->initial_buffer_fullness);
 }
 
-void VaapiEncoderBase::fill(VAEncMiscParameterRateControl* rateControl) const
+void VaapiEncoderBase::fill(VAEncMiscParameterRateControl* rateControl, uint32_t temproalID) const
 {
-    rateControl->bits_per_second = m_videoParamCommon.rcParams.bitRate;
+#if VA_CHECK_VERSION(0, 39, 4)
+    rateControl->rc_flags.bits.temporal_id = temproalID;
+#endif
+    rateControl->bits_per_second = ((temproalID == 0) ?
+        m_videoParamCommon.rcParams.bitRate : m_videoParamCommon.temporalLayers.bitRate[temproalID-1]);
     rateControl->initial_qp =  m_videoParamCommon.rcParams.initQP;
     rateControl->min_qp =  m_videoParamCommon.rcParams.minQP;
     /*FIXME: where to find max_qp */
@@ -462,9 +466,36 @@ void VaapiEncoderBase::fill(VAEncMiscParameterRateControl* rateControl) const
 
 }
 
-void VaapiEncoderBase::fill(VAEncMiscParameterFrameRate* frameRate) const
+void VaapiEncoderBase::fill(VAEncMiscParameterFrameRate* frameRate, uint32_t temproalID) const
 {
-    frameRate->framerate = fps();
+#if VA_CHECK_VERSION(0, 39, 4)
+    frameRate->framerate_flags.bits.temporal_id = temproalID;
+#endif
+    const VideoFrameRate* rate;
+    if (!temproalID) {
+        rate = &m_videoParamCommon.frameRate;
+    } else {
+        rate = &m_videoParamCommon.temporalLayers.frameRate[temproalID-1];
+    }
+    frameRate->framerate = (rate->frameRateNum<<16) | rate->frameRateDenom;
+}
+bool VaapiEncoderBase::ensureRateControl(VaapiEncPicture* picture, uint32_t temproalID)
+{
+    VAEncMiscParameterRateControl* rateControl = NULL;
+    if (!picture->newMisc(VAEncMiscParameterTypeRateControl, rateControl))
+        return false;
+    if (rateControl)
+        fill(rateControl, temproalID);
+    return true;
+}
+bool VaapiEncoderBase::ensureFrameRate(VaapiEncPicture* picture, uint32_t temproalID)
+{
+    VAEncMiscParameterFrameRate* frameRate = NULL;
+    if (!picture->newMisc(VAEncMiscParameterTypeFrameRate, frameRate))
+        return false;
+    if (frameRate)
+        fill(frameRate, temproalID);
+    return true;
 }
 
 /* Generates additional control parameters */
@@ -482,17 +513,15 @@ bool VaapiEncoderBase::ensureMiscParams (VaapiEncPicture* picture)
     VideoRateControl mode = rateControlMode();
     if (mode == RATE_CONTROL_CBR ||
             mode == RATE_CONTROL_VBR) {
-        VAEncMiscParameterRateControl* rateControl = NULL;
-        if (!picture->newMisc(VAEncMiscParameterTypeRateControl, rateControl))
+        //+1 for layer 0
+        uint32_t layers = m_videoParamCommon.temporalLayers.numLayers + 1;
+        for (uint32_t i = 0; i < layers; i++) {
+            if (!ensureRateControl(picture, i))
             return false;
-        if (rateControl)
-            fill(rateControl);
 
-        VAEncMiscParameterFrameRate* frameRate = NULL;
-        if (!picture->newMisc(VAEncMiscParameterTypeFrameRate, frameRate))
+            if (!ensureFrameRate(picture, i))
             return false;
-        if (frameRate)
-            fill(frameRate);
+        }
     }
     return true;
 }

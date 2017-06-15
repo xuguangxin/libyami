@@ -100,9 +100,11 @@ protected:
 
     //rate control related things
     void fill(VAEncMiscParameterHRD*) const ;
-    void fill(VAEncMiscParameterRateControl*) const ;
-    void fill(VAEncMiscParameterFrameRate*) const;
+    void fill(VAEncMiscParameterRateControl*, uint32_t temproalID = 0) const ;
+    void fill(VAEncMiscParameterFrameRate*, uint32_t temproalID) const;
     virtual bool ensureMiscParams(VaapiEncPicture*);
+    bool ensureRateControl(VaapiEncPicture * picture, uint32_t temproalID);
+    bool ensureFrameRate(VaapiEncPicture * picture, uint32_t temproalID);
 
     //properties
     VideoProfile profile() const;
