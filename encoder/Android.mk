@@ -9,7 +9,8 @@ LOCAL_SRC_FILES := \
         vaapiencoder_host.cpp \
 
 LOCAL_SRC_FILES += \
-        vaapiencoder_h264.cpp
+        vaapiencoder_h264.cpp \
+	vaapilayerid.cpp
 
 LOCAL_SRC_FILES += \
         vaapiencoder_jpeg.cpp
@@ -23,6 +24,7 @@ LOCAL_SRC_FILES += \
 LOCAL_C_INCLUDES:= \
         $(LOCAL_PATH)/.. \
         $(LOCAL_PATH)/../common \
+        $(LOCAL_PATH)/../interface \
         $(LOCAL_PATH)/../vaapi \
         $(LOCAL_PATH)/../codecparsers \
         external/libcxx/include \
@@ -32,5 +34,6 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libc++
 
+LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE := libyami_encoder
 include $(BUILD_STATIC_LIBRARY)

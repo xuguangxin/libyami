@@ -72,7 +72,9 @@ const bool VaapiDecoderJPEG::s_registered =
     VaapiDecoderFactory::register_<VaapiDecoderJPEG>(YAMI_MIME_JPEG);
 #endif
 
+#ifndef ANDROID
 extern "C" {
+#endif
 
 IVideoDecoder *createVideoDecoder(const char *mimeType)
 {
@@ -105,4 +107,7 @@ std::vector<std::string> getVideoDecoderMimeTypes()
 {
     return VaapiDecoderFactory::keys();
 }
+
+#ifndef ANDROID
 } // extern "C"
+#endif

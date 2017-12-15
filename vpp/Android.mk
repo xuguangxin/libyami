@@ -20,9 +20,10 @@ LOCAL_SHARED_LIBRARIES := \
         libc++
 
 LOCAL_CPPFLAGS += \
-        --rtti
+        -frtti
 
 LOCAL_ALLOW_UNDEFINED_SYMBOLS := true
 
+LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE := libyami_vpp
 include $(BUILD_STATIC_LIBRARY)

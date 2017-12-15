@@ -21,7 +21,9 @@
 #include <vector>
 #include <VideoPostProcessInterface.h>
 
+#ifndef ANDROID
 extern "C" { // for dlsym usage
+#endif
 
 /** \file VideoPostProcessHost.h
 */
@@ -41,5 +43,8 @@ std::vector<std::string> getVideoPostProcessMimeTypes();
 
 typedef YamiMediaCodec::IVideoPostProcess *(*YamiCreateVideoPostProcessFuncPtr) (const char *mimeType);
 typedef void (*YamiReleaseVideoPostProcessFuncPtr)(YamiMediaCodec::IVideoPostProcess * p);
+
+#ifndef ANDROID
 }
+#endif
 #endif                          /* VIDEO_POST_PROCESS_HOST_H_ */

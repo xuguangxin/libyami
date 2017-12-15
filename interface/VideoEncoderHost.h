@@ -21,7 +21,9 @@
 #include <vector>
 #include <VideoEncoderInterface.h>
 
+#ifndef ANDROID
 extern "C" { // for dlsym usage
+#endif
 
 /** \file VideoEncoderHost.h
 */
@@ -39,5 +41,7 @@ std::vector<std::string> getVideoEncoderMimeTypes();
 
 typedef YamiMediaCodec::IVideoEncoder *(*YamiCreateVideoEncoderFuncPtr) (const char *mimeType);
 typedef void (*YamiReleaseVideoEncoderFuncPtr)(YamiMediaCodec::IVideoEncoder * p);
+#ifndef ANDROID
 }
+#endif
 #endif                          /* VIDEO_ENCODER_HOST_H_ */

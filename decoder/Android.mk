@@ -9,8 +9,7 @@ LOCAL_SRC_FILES := \
         vaapidecpicture.cpp \
 
 LOCAL_SRC_FILES += \
-        vaapidecoder_h264.cpp \
-        vaapidecoder_h264_dpb.cpp \
+        vaapidecoder_h264.cpp
 
 #LOCAL_SRC_FILES += \
         vaapidecoder_h265.cpp
@@ -22,7 +21,7 @@ LOCAL_SRC_FILES += \
         vaapidecoder_vp9.cpp
 
 LOCAL_SRC_FILES += \
-        vaapidecoder_jpeg.cpp
+        vaapiDecoderJPEG.cpp
 
 LOCAL_SRC_FILES += \
         vaapidecoder_fake.cpp
@@ -30,6 +29,7 @@ LOCAL_SRC_FILES += \
 LOCAL_C_INCLUDES:= \
         $(LOCAL_PATH)/.. \
         $(LOCAL_PATH)/../common \
+        $(LOCAL_PATH)/../interface \
         external/libcxx/include \
         $(TARGET_OUT_HEADERS)/libva \
 
@@ -39,5 +39,6 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_ALLOW_UNDEFINED_SYMBOLS := true
 
+LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE := libyami_decoder
 include $(BUILD_STATIC_LIBRARY)

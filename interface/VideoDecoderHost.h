@@ -22,7 +22,9 @@
 #include <vector>
 #include <VideoDecoderInterface.h>
 
+#ifndef ANDROID
 extern "C" { // for dlsym usage
+#endif
 /** \file VideoDecoderHost.h
 */
 
@@ -39,5 +41,8 @@ std::vector<std::string> getVideoDecoderMimeTypes();
 
 typedef YamiMediaCodec::IVideoDecoder *(*YamiCreateVideoDecoderFuncPtr) (const char *mimeType);
 typedef void (*YamiReleaseVideoDecoderFuncPtr)(YamiMediaCodec::IVideoDecoder * p);
+
+#ifndef ANDROID
 }
+#endif
 #endif                          /* VIDEO_DECODER_HOST_H_ */
