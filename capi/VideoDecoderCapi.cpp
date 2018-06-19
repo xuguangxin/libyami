@@ -107,6 +107,12 @@ const VideoFormatInfo* decodeGetFormatInfo(DecodeHandler p)
     return (p ? ((IVideoDecoder*)p)->getFormatInfo() : NULL);
 }
 
+void decodeSetAllocator(DecodeHandler p, SurfaceAllocator* allocator)
+{
+    if (p)
+        ((IVideoDecoder*)p)->setAllocator(allocator);
+}
+
 void releaseDecoder(DecodeHandler p)
 {
     if (p)

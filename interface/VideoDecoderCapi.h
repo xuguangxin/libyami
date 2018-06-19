@@ -44,6 +44,8 @@ VideoFrame* decodeGetOutput(DecodeHandler p);
 
 const VideoFormatInfo* decodeGetFormatInfo(DecodeHandler p);
 
+void decodeSetAllocator(DecodeHandler p, SurfaceAllocator* allocator);
+
 void releaseDecoder(DecodeHandler p);
 
 /*deprecated*/
