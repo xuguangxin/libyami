@@ -240,8 +240,8 @@ namespace VC1 {
         Parser();
         ~Parser();
         bool parseCodecData(uint8_t*, uint32_t);
-        bool parseFrameHeader(uint8_t*&, uint32_t&);
-        bool parseSliceHeader(uint8_t*, uint32_t);
+        bool parseFrameHeader(const uint8_t* data, uint32_t size);
+        bool parseSliceHeader(const uint8_t* data, uint32_t size);
         int32_t searchStartCode(uint8_t*, uint32_t);
         SeqHdr m_seqHdr;
         FrameHdr m_frameHdr;

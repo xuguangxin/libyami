@@ -202,16 +202,14 @@ namespace VC1 {
         return true;
     }
 
-    bool Parser::parseFrameHeader(uint8_t*& data, uint32_t& size)
+    bool Parser::parseFrameHeader(const uint8_t* data, uint32_t size)
     {
         bool ret = false;
         m_mbWidth = (m_seqHdr.coded_width + 15) >> 4;
         m_mbHeight = (m_seqHdr.coded_height + 15) >> 4;
         mallocBitPlanes();
         memset(&m_frameHdr, 0, sizeof(m_frameHdr));
-        if (!convertToRbdu(data, size))
-            return false;
-        BitReader bitReader(&m_rbdu[0], m_rbdu.size());
+        BitReader bitReader(data, size);
         if (m_seqHdr.profile != PROFILE_ADVANCED) {
             ret = parseFrameHeaderSimpleMain(&bitReader);
         }
@@ -418,7 +416,7 @@ namespace VC1 {
         return true;
     }
 
-    bool Parser::parseSliceHeader(uint8_t* data, uint32_t size)
+    bool Parser::parseSliceHeader(const uint8_t* data, uint32_t size)
     {
         bool temp;
         BitReader* br;
