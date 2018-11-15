@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "codecparsers/nalReader.h"
 #include "bitReader.h"
 #include <vector>
 
@@ -269,7 +270,7 @@ namespace VC1 {
         bool parseSequenceHeader(const uint8_t*, uint32_t);
         bool parseEntryPointHeader(const uint8_t*, uint32_t);
         bool parseFrameHeaderSimpleMain(BitReader*);
-        bool parseFrameHeaderAdvanced(BitReader*);
+        bool parseFrameHeaderAdvanced(YamiParser::NalReader&);
         std::vector<uint8_t> m_rbdu;
     };
 

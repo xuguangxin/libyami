@@ -21,6 +21,7 @@
 #include "common/common_def.h"
 #include "common/log.h"
 #include "common/nalreader.h"
+#include "codecparsers/nalReader.h"
 #include "vc1Parser.h"
 #include <cassert>
 #include <cstring>
@@ -210,14 +211,16 @@ namespace VC1 {
         mallocBitPlanes();
         memset(&m_frameHdr, 0, sizeof(m_frameHdr));
         BitReader bitReader(data, size);
+                    YamiParser::NalReader nr(data, size);
         if (m_seqHdr.profile != PROFILE_ADVANCED) {
             ret = parseFrameHeaderSimpleMain(&bitReader);
         }
         else {
+
             /* support advanced profile */
-            ret = parseFrameHeaderAdvanced(&bitReader);
+            ret = parseFrameHeaderAdvanced(nr);
         }
-        m_frameHdr.macroblock_offset = bitReader.getPos();
+        m_frameHdr.macroblock_offset = nr.getPos();
         return ret;
     }
 
@@ -427,10 +430,11 @@ namespace VC1 {
         br = &bitReader;
         READ_BITS(m_sliceHdr.slice_addr, 9);
         READ(temp);
+        YamiParser::NalReader nr(data, size);
         if (temp)
-            ret = parseFrameHeaderAdvanced(&bitReader);
+            ret = parseFrameHeaderAdvanced(nr);
 
-        m_sliceHdr.macroblock_offset = bitReader.getPos();
+        m_sliceHdr.macroblock_offset = nr.getPos();
         return ret;
     }
 
@@ -906,8 +910,9 @@ namespace VC1 {
     /*Table 83: Interlaced Frame P picture layer bitstream for Advanced Profile*/
     /*Table 84: Interlaced Frame B picture layer bitstream for Advanced Profile*/
     /*Table 85: Picture Layer bitstream for Field 1 of Interlace Field Picture for Advanced Profile*/
-    bool Parser::parseFrameHeaderAdvanced(BitReader* br)
+    bool Parser::parseFrameHeaderAdvanced(YamiParser::NalReader& abr)
     {
+        YamiParser::NalReader* br = &abr;
         uint32_t temp;
         if (m_seqHdr.interlace) {
             m_frameHdr.fcm = getFirst01Bit(br, 0, 2);

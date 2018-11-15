@@ -70,7 +70,7 @@ public:
         return (getPos() >= (static_cast<uint64_t>(m_size) << 3));
     }
 
-protected:
+public:
     virtual void loadDataToCache(uint32_t nbytes);
 
     const uint8_t* m_stream; /*a pointer to source data*/
