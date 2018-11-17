@@ -40,7 +40,7 @@ public:
     void rbspTrailingBits();
 
 private:
-    bool isEmulationPreventionByte(const uint8_t* p) const;
+    bool isEmulationPreventionByte(const uint8_t* p);
 };
 
 bool NalReader::readUe(uint8_t& v)

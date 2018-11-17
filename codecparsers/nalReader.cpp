@@ -34,7 +34,7 @@ NalReader::NalReader(const uint8_t* pdata, uint32_t size)
 {
 }
 
-bool NalReader::isEmulationPreventionByte(const uint8_t* p) const
+bool NalReader::isEmulationPreventionByte(const uint8_t* p)
 {
     return *p == 0x03
             && (p - m_stream) >= 2

@@ -14,27 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef EpbReader_h
-#define EpbReader_h
+#ifndef RbduReader_h
+#define RbduReader_h
 
-#include "bitReader.h"
+#include "EpbReader.h"
 #include "common/log.h"
 
 namespace YamiParser {
 
-//this reader will skip the emulation prevention byte(epb)
-class EpbReader : public BitReader {
+//RBDU reader for vc1, it will skip the emulation prevention bytes.
+class RbduReader : public EpbReader {
 public:
-    EpbReader(const uint8_t* data, uint32_t size);
-
-protected:
-    virtual bool isEmulationPreventionByte(const uint8_t* p) = 0;
+    RbduReader(const uint8_t* data, uint32_t size);
 
 private:
-    void loadDataToCache(uint32_t nbytes);
-
+    bool isEmulationPreventionByte(const uint8_t* p);
+    int m_idx; //index to epbs
 };
 
-} /*namespace YamiParser*/
-
+}
 #endif
