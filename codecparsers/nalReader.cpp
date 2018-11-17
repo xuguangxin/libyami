@@ -29,37 +29,16 @@ uint32_t getHalfCeil(uint32_t n)
     return ((n + 1) >> 1);
 }
 
-NalReader::NalReader(const uint8_t *pdata, uint32_t size)
-    : BitReader(pdata, size)
+NalReader::NalReader(const uint8_t* pdata, uint32_t size)
+    : EpbReader(pdata, size)
 {
 }
 
-inline bool NalReader::isEmulationBytes(const uint8_t *p) const
+bool NalReader::isEmulationPreventionByte(const uint8_t* p) const
 {
     return *p == 0x03
             && (p - m_stream) >= 2
             && *(p - 1) == 0x00 && *(p - 2) == 0x00;
-}
-
-void NalReader::loadDataToCache(uint32_t nbytes)
-{
-    const uint8_t *pStart = m_stream + m_loadBytes;
-    const uint8_t *p;
-    const uint8_t *pEnd = m_stream + m_size;
-    /*the numbers of emulation prevention three byte in current load block*/
-
-    unsigned long int tmp = 0;
-    uint32_t size = 0;
-    for (p = pStart; p < pEnd && size < nbytes; p++) {
-        if(!isEmulationBytes(p)) {
-            tmp <<= 8;
-            tmp |= *p;
-            size++;
-        }
-    }
-    m_cache = tmp;
-    m_loadBytes += p - pStart;
-    m_bitsInCache = size << 3;
 }
 
 /*according to 9.1 of h264 spec*/
